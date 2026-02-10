@@ -2225,6 +2225,8 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
             el.innerHTML = html;
         }})();
 
+    }})();
+
     // ── Jobs Tab (BLS OEWS Data) ───────────────────────────────────────
     (function() {{
         const hasBLS = BLS_BY_STATE.length > 0 || BLS_BY_INDUSTRY.length > 0;

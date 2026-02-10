@@ -53,14 +53,11 @@ def make_request(endpoint: str, username: str, password: str, params: dict = Non
             return json.loads(resp.read().decode())
     except HTTPError as e:
         if e.code == 401:
-            print("ERROR: Authentication failed. Check your O*NET API credentials.")
-            sys.exit(1)
+            raise RuntimeError("Authentication failed. Check your O*NET API credentials.")
         elif e.code == 422:
-            print(f"ERROR: Invalid request — {e.read().decode()}")
-            sys.exit(1)
+            raise RuntimeError(f"Invalid request — {e.read().decode()}")
         else:
-            print(f"ERROR: HTTP {e.code} — {e.reason}")
-            sys.exit(1)
+            raise RuntimeError(f"HTTP {e.code} — {e.reason}")
 
 
 def search_occupations(keyword: str, username: str, password: str) -> list:
@@ -1610,4 +1607,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except RuntimeError as e:
+        print(f"\nERROR: {e}")
+        sys.exit(1)

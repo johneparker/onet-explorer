@@ -80,6 +80,31 @@ The AI Impact tab provides a data-driven assessment of how artificial intelligen
 
 The classification engine uses regex-based keyword pattern matching against three category dictionaries, with weighted scoring that includes a conservative bias toward human-essential classification to avoid over-claiming AI capability.
 
+## Web App (Render Deployment)
+
+A Flask web interface is also included, letting users search and view dashboards in the browser without running the CLI.
+
+### Deploy to Render
+
+1. Fork or push this repo to your GitHub account
+2. Go to [render.com](https://render.com) → **New** → **Blueprint**
+3. Connect this repository — Render will auto-detect `render.yaml`
+4. Set the environment variables when prompted:
+   - `ONET_USERNAME` — your O\*NET API username
+   - `ONET_PASSWORD` — your O\*NET API password
+5. Deploy — your app will be live at `https://onet-explorer.onrender.com`
+
+### Run Locally
+
+```bash
+pip install -r requirements.txt
+export ONET_USERNAME=your_username
+export ONET_PASSWORD=your_password
+python app.py
+```
+
+Then visit `http://localhost:5000` in your browser.
+
 ## How It Works
 
 1. **API Client** — makes authenticated requests to O\*NET Web Services REST API

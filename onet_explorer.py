@@ -474,44 +474,103 @@ def get_bls_national_employment(onet_code: str, bls_api_key: str = "") -> int:
 
 
 # ─── AI Impact Analysis Engine ───────────────────────────────────────────────
+#
+# Five-Element Business Impact Scoring Model
+# Each task is scored 0-9 on five dimensions of AI impact potential.
+# Element averages across all tasks produce the occupation-level scores.
+#
+# Elements:
+#   1. Efficiency & Time Savings — AI reduces duration, eliminates steps, accelerates throughput
+#   2. Quality & Accuracy — AI improves consistency, reduces errors, increases precision
+#   3. Cost Impact — AI reduces labor cost, reallocates resources, lowers operational spend
+#   4. Revenue & Innovation Potential — AI unlocks new revenue, services, differentiation
+#   5. Service & Stakeholder Satisfaction — AI improves CX, employee experience, responsiveness
 
-# Keywords signaling high AI automation potential (routine, data-driven, repetitive)
-_AUTOMATE_KEYWORDS = [
-    r"\bschedul\w*", r"\btrack\w*", r"\bmonitor\w*", r"\blog\w*\b", r"\brecord\w*",
-    r"\bcompil\w*", r"\bfile\w*", r"\bformat\w*", r"\bsort\w*", r"\bdata.?entry",
-    r"\btranscri\w*", r"\bcalculat\w*", r"\btabulat\w*", r"\binventory",
-    r"\binvoic\w*", r"\bbookkeep\w*", r"\bpayroll", r"\bprocess\w* (claim|order|form|request)",
-    r"\brout\w*", r"\bgenerat\w* report", r"\bupdat\w* (record|database|system|file|log)",
-    r"\bverif\w* (data|record|document|information)", r"\barchiv\w*",
-    r"\bcatalog\w*", r"\bindex\w*", r"\bclassif\w* (document|record|data)",
-]
+# ── Element Keyword Dictionaries ──
+# Each element has "strong" patterns (contribute 2.0 points) and "moderate" patterns (1.0 point).
+# A task's raw score = sum of weights; element score = min(9, round(raw)).
 
-# Keywords signaling high AI augmentation potential (complex analysis, creative support)
-_AUGMENT_KEYWORDS = [
-    r"\banalyz\w*", r"\bresearch\w*", r"\bdesign\w*", r"\bdevelop\w*",
-    r"\bwrit\w*", r"\bdraft\w*", r"\breview\w*", r"\bevaluat\w*",
-    r"\bdiagnos\w*", r"\bforecast\w*", r"\bplan\w*", r"\boptimiz\w*",
-    r"\bmodel\w*", r"\btest\w*", r"\bassess\w*", r"\bexamin\w*",
-    r"\bidentif\w* (trend|pattern|issue|problem|risk|opportunity)",
-    r"\binterpret\w*", r"\bsynthe\w*", r"\bsummariz\w*",
-    r"\binvestigat\w*", r"\bprogram\w*", r"\bcode\w*", r"\baudit\w*",
-    r"\bcreat\w* (content|design|model|plan|strateg)",
-    r"\bpredicti\w*", r"\bstatistic\w*", r"\bsimulat\w*",
-]
+_EFFICIENCY_KEYWORDS = {
+    "strong": [
+        r"\bschedul\w*", r"\btrack\w*", r"\bmonitor\w*", r"\brecord\w*",
+        r"\bcompil\w*", r"\bsort\w*", r"\bdata.?entry", r"\btranscri\w*",
+        r"\bcalculat\w*", r"\btabulat\w*", r"\bprocess\w*", r"\brout\w*",
+        r"\bgenerat\w* report", r"\bupdat\w* (record|database|system|file|log)",
+        r"\barchiv\w*", r"\bcatalog\w*", r"\bindex\w*", r"\bformat\w*",
+        r"\bautomat\w*", r"\brepetitiv\w*", r"\bstreamlin\w*", r"\bexpedi\w*",
+    ],
+    "moderate": [
+        r"\banalyz\w*", r"\breview\w*", r"\bcoordinat\w*", r"\bplan\w*",
+        r"\borganiz\w*", r"\bprioritiz\w*", r"\bsummariz\w*", r"\bfile\w*",
+        r"\binventory", r"\bbookkeep\w*", r"\bpayroll", r"\binvoic\w*",
+        r"\blog\w*\b", r"\bverif\w*", r"\bcheck\w*",
+    ],
+}
 
-# Keywords signaling tasks that remain human-essential (relational, ethical, physical)
-_HUMAN_KEYWORDS = [
-    r"\bnegotiat\w*", r"\blead\w*", r"\bmentor\w*", r"\bcounsel\w*",
-    r"\bpersuad\w*", r"\bmotivat\w*", r"\bmediat\w*", r"\bempathi\w*",
-    r"\bsupervis\w*", r"\bmanag\w* (team|staff|people|employee|personnel)",
-    r"\bcoach\w*", r"\btrain\w* (staff|employee|personnel|team)",
-    r"\bresolv\w* (conflict|dispute)", r"\bbuild\w* (relationship|rapport|trust)",
-    r"\bphysical\w*", r"\bhand\w*", r"\boperat\w* (machine|equipment|vehicle)",
-    r"\bpresent\w* (to|before|at)", r"\bdeliver\w* (speech|presentation|lecture)",
-    r"\bconvinc\w*", r"\binspir\w*", r"\bethic\w*",
-    r"\bemergenc\w*", r"\bcrisis\w*", r"\bpatient\w* care",
-    r"\bsafety\w*", r"\bprotect\w*",
-]
+_QUALITY_KEYWORDS = {
+    "strong": [
+        r"\bverif\w*", r"\bvalidat\w*", r"\binspect\w*", r"\baudit\w*",
+        r"\btest\w*", r"\bquality\w*", r"\baccura\w*", r"\bmeasur\w*",
+        r"\bdiagnos\w*", r"\bdetect\w*", r"\bcheck\w*", r"\bcompl\w*iance",
+        r"\bstandard\w*", r"\bcertif\w*", r"\bcalibrat\w*", r"\bprecis\w*",
+        r"\bconsisten\w*", r"\berror\w*", r"\bdefect\w*",
+    ],
+    "moderate": [
+        r"\banalyz\w*", r"\bevaluat\w*", r"\bassess\w*", r"\bresearch\w*",
+        r"\bexamin\w*", r"\breview\w*", r"\bmonitor\w*", r"\binterpret\w*",
+        r"\bdesign\w*", r"\bdevelop\w*", r"\bmodel\w*", r"\bforecast\w*",
+        r"\bstatistic\w*", r"\boptimiz\w*",
+    ],
+}
+
+_COST_KEYWORDS = {
+    "strong": [
+        r"\bprocess\w*", r"\bautomat\w*", r"\brout\w*", r"\brepetitiv\w*",
+        r"\bmanual\w*", r"\badministrat\w*", r"\bclerical\w*", r"\bdata.?entry",
+        r"\bfile\w*", r"\brecord\w*", r"\bschedul\w*", r"\bbilling\w*",
+        r"\binvoic\w*", r"\bpayroll", r"\binventory", r"\bprocur\w*",
+        r"\bbookkeep\w*", r"\bbudget\w*", r"\bcost\w*",
+    ],
+    "moderate": [
+        r"\banalyz\w*", r"\bresearch\w*", r"\breview\w*", r"\bplan\w*",
+        r"\bdevelop\w*", r"\bimplement\w*", r"\bcoordinat\w*",
+        r"\bcompil\w*", r"\btrack\w*", r"\bmonitor\w*", r"\breport\w*",
+        r"\bmaintain\w*", r"\bupdat\w*",
+    ],
+}
+
+_REVENUE_KEYWORDS = {
+    "strong": [
+        r"\bdevelop\w*", r"\bdesign\w*", r"\binnovat\w*", r"\bcreat\w*",
+        r"\bmarket\w*", r"\bproduct\w*", r"\bstrateg\w*", r"\brevenue\w*",
+        r"\bgrowth\w*", r"\bopportunit\w*", r"\bresearch\w*", r"\bprototyp\w*",
+        r"\bexperiment\w*", r"\boptimiz\w*", r"\bcompetitiv\w*",
+        r"\bcustomer\w* (acqui|retain|segment|experience)",
+        r"\bsales\w*", r"\bbusiness\w* develop",
+    ],
+    "moderate": [
+        r"\banalyz\w*", r"\bplan\w*", r"\bevaluat\w*", r"\bimplement\w*",
+        r"\bcommunicat\w*", r"\bpresent\w*", r"\bforecast\w*",
+        r"\bidentif\w*", r"\bpropos\w*", r"\brecommend\w*",
+        r"\bprogram\w*", r"\bcode\w*", r"\btest\w*",
+    ],
+}
+
+_SERVICE_KEYWORDS = {
+    "strong": [
+        r"\bcustomer\w*", r"\bclient\w*", r"\bpatient\w*", r"\bcommunicat\w*",
+        r"\brespond\w*", r"\bservice\w*", r"\bsupport\w*", r"\bconsult\w*",
+        r"\badvise\w*", r"\bpresent\w*", r"\bstakeholder\w*", r"\brelationship\w*",
+        r"\bengage\w*", r"\bsatisfact\w*", r"\bfeedback\w*",
+        r"\bresolv\w* (issue|complaint|problem|concern)",
+    ],
+    "moderate": [
+        r"\bcoordinat\w*", r"\bcollaborat\w*", r"\breview\w*", r"\bevaluat\w*",
+        r"\breport\w*", r"\bdeliver\w*", r"\btrain\w*", r"\beduca\w*",
+        r"\binform\w*", r"\bnotif\w*", r"\bnegotiat\w*",
+        r"\bmediat\w*", r"\bmentor\w*", r"\bcoach\w*",
+    ],
+}
 
 # AI agent catalog: (name, icon, description, trigger keywords)
 _AI_AGENT_CATALOG = [
@@ -662,41 +721,48 @@ def _match_keywords(text: str, patterns: list) -> int:
     return count
 
 
-def classify_task_ai_impact(statement: str) -> dict:
-    """Classify a single task's AI impact potential.
+def _score_element(statement: str, keyword_dict: dict) -> int:
+    """Score a task 0-9 on a single business impact element.
 
-    Returns {classification, confidence, rationale} where classification is one of:
-        'automate' — AI can fully handle this task
-        'augment'  — AI significantly enhances human performance
-        'human'    — Task remains primarily human-driven
+    Uses strong keywords (weight 2.0 each) and moderate keywords (weight 1.0 each).
+    Raw weighted sum is clamped to 0-9.
     """
-    auto_hits = _match_keywords(statement, _AUTOMATE_KEYWORDS)
-    augment_hits = _match_keywords(statement, _AUGMENT_KEYWORDS)
-    human_hits = _match_keywords(statement, _HUMAN_KEYWORDS)
+    strong_hits = _match_keywords(statement, keyword_dict["strong"])
+    moderate_hits = _match_keywords(statement, keyword_dict["moderate"])
+    raw = strong_hits * 2.0 + moderate_hits * 1.0
+    return min(9, max(0, round(raw)))
 
-    total = auto_hits + augment_hits + human_hits
-    if total == 0:
-        # Default to augment for unclassified tasks
-        return {"classification": "augment", "confidence": 40,
-                "rationale": "General professional task with moderate AI augmentation potential."}
 
-    # Weighted scoring
-    auto_score = auto_hits * 1.0
-    augment_score = augment_hits * 0.85
-    human_score = human_hits * 1.1  # slight bias toward human to avoid over-claiming
+def score_task_elements(statement: str) -> dict:
+    """Score a single task on five business impact elements (each 0-9).
 
-    max_score = max(auto_score, augment_score, human_score)
-    confidence = min(95, int(40 + (max_score / total) * 55))
+    Returns dict with element scores and derived classification.
+    """
+    efficiency = _score_element(statement, _EFFICIENCY_KEYWORDS)
+    quality = _score_element(statement, _QUALITY_KEYWORDS)
+    cost = _score_element(statement, _COST_KEYWORDS)
+    revenue = _score_element(statement, _REVENUE_KEYWORDS)
+    service = _score_element(statement, _SERVICE_KEYWORDS)
 
-    if max_score == auto_score and auto_score > augment_score:
-        return {"classification": "automate", "confidence": confidence,
-                "rationale": "Involves routine, data-driven, or repetitive processes well-suited to AI automation."}
-    elif max_score == human_score and human_score > augment_score:
-        return {"classification": "human", "confidence": confidence,
-                "rationale": "Requires interpersonal judgment, physical presence, ethical reasoning, or leadership that remains human-essential."}
+    avg = (efficiency + quality + cost + revenue + service) / 5.0
+
+    # Derive classification from average for backward compatibility
+    if avg >= 5.0:
+        classification = "automate"
+    elif avg >= 2.5:
+        classification = "augment"
     else:
-        return {"classification": "augment", "confidence": confidence,
-                "rationale": "Complex analytical or creative work where AI serves as a powerful co-pilot enhancing speed and quality."}
+        classification = "human"
+
+    return {
+        "efficiency": efficiency,
+        "quality": quality,
+        "cost": cost,
+        "revenue": revenue,
+        "service": service,
+        "avg_score": round(avg, 1),
+        "classification": classification,
+    }
 
 
 def recommend_agents(tasks: list, skills: list, knowledge: list) -> list:
@@ -747,47 +813,52 @@ def recommend_ai_skills(tasks: list, task_classifications: list) -> list:
 
 def analyze_ai_impact(summary: dict, tasks: list, skills: list,
                       knowledge: list, abilities: list) -> dict:
-    """Produce a complete AI impact analysis for an occupation.
+    """Produce a five-element AI business impact analysis for an occupation.
+
+    Each task is scored 0-9 on five dimensions. Element averages across all
+    tasks produce the occupation-level element scores.
 
     Returns a dict with:
-        role_summary   — narrative description of AI's impact on the role
-        task_analysis  — per-task classification list
-        distribution   — {automate: n, augment: n, human: n}
-        overall_score  — 0-100 composite AI impact score
-        agents         — ranked list of recommended AI agents
-        ai_skills      — recommended skills for AI-era readiness
-        outlook        — strategic outlook narrative
+        role_summary    — narrative description of AI's impact on the role
+        task_analysis   — per-task scoring list with five element scores
+        element_scores  — {efficiency, quality, cost, revenue, service} averages
+        distribution    — {automate, augment, human} counts (derived)
+        overall_score   — 0-100 composite AI impact score
+        agents          — ranked list of recommended AI agents
+        ai_skills       — recommended skills for AI-era readiness
+        outlook         — strategic outlook narrative
     """
-    # Classify every task
+    # Score every task on five elements
     task_analysis = []
     for t in tasks:
-        classification = classify_task_ai_impact(t["statement"])
+        scores = score_task_elements(t["statement"])
         task_analysis.append({
             "statement": t["statement"],
             "importance": t["score"]["value"] if isinstance(t["score"], dict) else t["score"],
             "category": t.get("category", ""),
-            **classification,
+            **scores,
         })
 
-    # Distribution counts
+    n_total = max(len(task_analysis), 1)
+
+    # Compute element averages
+    elem_keys = ["efficiency", "quality", "cost", "revenue", "service"]
+    element_scores = {}
+    for key in elem_keys:
+        avg = sum(t[key] for t in task_analysis) / n_total if task_analysis else 0
+        element_scores[key] = round(avg, 1)
+
+    # Overall score: mean of five element averages, scaled to 0-100
+    avg_of_elements = sum(element_scores.values()) / 5.0 if element_scores else 0
+    overall_score = min(95, max(5, int((avg_of_elements / 9.0) * 100)))
+
+    # Distribution counts (derived from avg_score per task)
     n_auto = sum(1 for t in task_analysis if t["classification"] == "automate")
     n_augment = sum(1 for t in task_analysis if t["classification"] == "augment")
     n_human = sum(1 for t in task_analysis if t["classification"] == "human")
-    n_total = max(len(task_analysis), 1)
-
     distribution = {"automate": n_auto, "augment": n_augment, "human": n_human}
 
-    # Weighted importance score: tasks with higher O*NET importance carry more weight
-    if task_analysis:
-        weighted_auto = sum(t["importance"] for t in task_analysis if t["classification"] == "automate")
-        weighted_augment = sum(t["importance"] for t in task_analysis if t["classification"] == "augment")
-        weighted_total = sum(t["importance"] for t in task_analysis)
-        overall_score = int(((weighted_auto * 1.0 + weighted_augment * 0.6) / max(weighted_total, 1)) * 100)
-        overall_score = min(95, max(10, overall_score))
-    else:
-        overall_score = 50
-
-    # Determine impact level label
+    # Impact level label
     if overall_score >= 75:
         impact_level = "Transformative"
         impact_color = "#EF4444"
@@ -801,55 +872,61 @@ def analyze_ai_impact(summary: dict, tasks: list, skills: list,
         impact_level = "Limited"
         impact_color = "#10B981"
 
-    # Generate narrative
+    # Narrative: reference the five-element model
     title = summary.get("title", "this occupation")
-    auto_pct = int((n_auto / n_total) * 100)
-    augment_pct = int((n_augment / n_total) * 100)
-    human_pct = int((n_human / n_total) * 100)
+
+    # Find the top and bottom scoring elements
+    sorted_elems = sorted(element_scores.items(), key=lambda x: x[1], reverse=True)
+    elem_labels = {
+        "efficiency": "Efficiency & Time Savings",
+        "quality": "Quality & Accuracy",
+        "cost": "Cost Impact",
+        "revenue": "Revenue & Innovation",
+        "service": "Service & Satisfaction",
+    }
+    top_elem = sorted_elems[0]
+    low_elem = sorted_elems[-1]
 
     role_summary = (
         f"AI is projected to have a <strong>{impact_level.lower()}</strong> impact on "
-        f"<strong>{html.escape(title)}</strong>. Analysis of {n_total} core tasks reveals that "
-        f"approximately {auto_pct}% of tasks have high automation potential, "
-        f"{augment_pct}% can be significantly augmented by AI co-pilots, and "
-        f"{human_pct}% remain primarily human-driven. "
+        f"<strong>{html.escape(title)}</strong>. Across {n_total} tasks scored on five business "
+        f"dimensions, the highest potential is in <strong>{elem_labels[top_elem[0]]}</strong> "
+        f"(avg {top_elem[1]}/9), while <strong>{elem_labels[low_elem[0]]}</strong> "
+        f"(avg {low_elem[1]}/9) shows the least AI-driven change. "
     )
 
     if overall_score >= 65:
         role_summary += (
-            "Professionals in this role should proactively develop AI collaboration skills "
-            "and prepare for substantial workflow transformation. Organizations should begin "
-            "piloting AI agents for high-automation tasks while upskilling staff on AI-augmented "
-            "processes."
+            "Organizations should proactively build AI adoption roadmaps, starting with "
+            "high-scoring efficiency and cost tasks to capture quick wins, then expanding "
+            "into quality and innovation use cases."
         )
     elif overall_score >= 40:
         role_summary += (
-            "This role will evolve significantly as AI tools mature. The focus should be on "
-            "adopting AI co-pilots for analytical and research tasks while preserving the "
-            "human expertise that defines professional value in this occupation."
+            "This role offers substantial AI augmentation opportunities. Focus initial investments "
+            "on the highest-scoring elements to demonstrate ROI before broader transformation."
         )
     else:
         role_summary += (
-            "While AI will provide useful support tools, the core human skills of this role — "
-            "interpersonal judgment, ethical reasoning, and physical presence — keep it highly "
-            "resistant to displacement. The emphasis should be on AI as an efficiency multiplier."
+            "AI will primarily serve as a support tool for this role. Target selective "
+            "automation of routine sub-tasks while preserving the human expertise that "
+            "defines this occupation's core value."
         )
 
     # Strategic outlook
     if overall_score >= 65:
         outlook = (
-            "High-impact role transformation expected within 2-4 years. Organizations should "
-            "establish AI centers of excellence and begin phased automation of routine tasks. "
-            "Professionals should invest heavily in AI orchestration and validation skills to "
-            "remain competitive. The role itself will likely evolve into a more strategic, "
-            "supervisory position overseeing AI-augmented workflows."
+            "High-impact role transformation expected within 2-4 years. The strongest business "
+            f"case is in {elem_labels[top_elem[0]]} where AI can deliver immediate measurable "
+            "gains. Organizations should establish AI centers of excellence and begin phased "
+            "deployment. Professionals should invest in AI orchestration and validation skills."
         )
     elif overall_score >= 40:
         outlook = (
-            "Steady evolution over 3-5 years as AI augmentation tools become mainstream. "
-            "Early adopters will gain significant productivity advantages. The core role persists "
-            "but with higher expectations for output volume and analytical depth. Investment in "
-            "AI literacy and tool proficiency will increasingly differentiate top performers."
+            "Steady evolution over 3-5 years as AI augmentation tools mature. Early adopters "
+            "will gain significant productivity advantages. The core role persists but with "
+            "higher expectations for output volume and analytical depth. Focus upskilling on "
+            "AI literacy and the tools most relevant to this occupation's highest-scoring elements."
         )
     else:
         outlook = (
@@ -865,6 +942,7 @@ def analyze_ai_impact(summary: dict, tasks: list, skills: list,
     return {
         "role_summary": role_summary,
         "task_analysis": task_analysis,
+        "element_scores": element_scores,
         "distribution": distribution,
         "overall_score": overall_score,
         "impact_level": impact_level,
@@ -904,6 +982,7 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
     bls_state_json = json.dumps(bls_by_state or [])
     bls_industry_json = json.dumps(bls_by_industry or [])
     bls_national_val = bls_national or 0
+    element_scores_json = json.dumps(ai_impact.get("element_scores", {}))
 
     return textwrap.dedent(f"""\
 <!DOCTYPE html>
@@ -1409,6 +1488,23 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
             border-bottom: 2px solid #FCE7F3;
         }}
 
+        .ai-filter-row {{
+            display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;
+        }}
+        .table-responsive {{
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }}
+        .table-responsive table {{
+            min-width: 700px;
+        }}
+
+        /* Score cell heat colors */
+        .score-cell {{
+            display: inline-block; width: 32px; height: 32px; line-height: 32px;
+            text-align: center; border-radius: 6px; font-weight: 700; font-size: 13px;
+        }}
+
         /* Footer */
         .footer {{
             text-align: center;
@@ -1417,14 +1513,89 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
             color: var(--text-secondary);
         }}
 
-        /* Responsive */
-        @media (max-width: 768px) {{
+        /* ── Responsive Design ────────────────────────────────── */
+
+        /* Tablet (≤ 1024px) */
+        @media (max-width: 1024px) {{
+            .container {{ padding: 12px; }}
+            .header {{ padding: 20px 24px; }}
+            .header h1 {{ font-size: 20px; }}
             .chart-row {{ grid-template-columns: 1fr; }}
-            .detail-grid, .agent-grid, .ai-skill-grid {{ grid-template-columns: 1fr; }}
-            .kpi-row {{ grid-template-columns: repeat(2, 1fr); }}
-            .tab {{ padding: 8px 12px; font-size: 13px; }}
-            .ai-score-ring {{ flex-direction: column; align-items: flex-start; }}
+            .kpi-row {{ grid-template-columns: repeat(3, 1fr); }}
+            .detail-grid {{ grid-template-columns: repeat(2, 1fr); }}
+            .agent-grid {{ grid-template-columns: repeat(2, 1fr); }}
+            .skills-narrative-grid {{ grid-template-columns: repeat(2, 1fr); }}
         }}
+
+        /* Mobile (≤ 768px) */
+        @media (max-width: 768px) {{
+            :root {{ --gap: 10px; }}
+            .container {{ padding: 8px; }}
+            .header {{ padding: 16px; border-radius: 8px; }}
+            .header h1 {{ font-size: 18px; }}
+            .header .desc {{ font-size: 13px; }}
+            .kpi-row {{ grid-template-columns: repeat(2, 1fr); gap: 8px; }}
+            .kpi-card {{ padding: 14px 16px; }}
+            .kpi-card .kpi-value {{ font-size: 28px; }}
+            .kpi-card .kpi-label {{ font-size: 11px; }}
+
+            /* Scrollable tab bar */
+            .tab-bar {{
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                flex-wrap: nowrap;
+                gap: 4px;
+                padding-bottom: 4px;
+            }}
+            .tab {{
+                padding: 8px 12px;
+                font-size: 12px;
+                white-space: nowrap;
+                flex-shrink: 0;
+            }}
+
+            .chart-card, .table-card, .outlook-card {{ padding: 14px; border-radius: 8px; }}
+            .chart-card h3, .table-card h3 {{ font-size: 14px; }}
+            .detail-grid, .agent-grid, .ai-skill-grid {{ grid-template-columns: 1fr; }}
+            .skills-narrative-grid {{ grid-template-columns: 1fr; }}
+            .ai-score-ring {{ flex-direction: column; align-items: flex-start; gap: 16px; }}
+            .ai-metrics {{ flex-direction: row; gap: 24px; }}
+
+            .chart-row {{ gap: 10px; }}
+            .jobs-summary {{ padding: 16px; gap: 16px; }}
+            .jobs-summary .jobs-metric .val {{ font-size: 22px; }}
+
+            .analysis-hero {{ padding: 18px; }}
+            .analysis-hero h2 {{ font-size: 20px; }}
+
+            .insight-grid {{ grid-template-columns: repeat(2, 1fr); gap: 10px; }}
+            .insight-item {{ padding: 12px; }}
+            .insight-item .i-value {{ font-size: 22px; }}
+
+            .narrative-section {{ padding: 18px; }}
+            .narrative-section p {{ font-size: 13px; }}
+
+            .trend-kpis {{ gap: 16px; }}
+            .trend-kpi .val {{ font-size: 22px; }}
+
+            table {{ font-size: 12px; }}
+            th, td {{ padding: 8px 10px; }}
+        }}
+
+        /* Small mobile (≤ 480px) */
+        @media (max-width: 480px) {{
+            .kpi-row {{ grid-template-columns: repeat(2, 1fr); gap: 6px; }}
+            .kpi-card {{ padding: 10px 12px; }}
+            .kpi-card .kpi-value {{ font-size: 22px; }}
+            .kpi-card .kpi-label {{ font-size: 10px; }}
+            .header h1 {{ font-size: 16px; }}
+            .header .code {{ font-size: 11px; }}
+            .header .desc {{ font-size: 12px; line-height: 1.5; }}
+            .tab {{ padding: 6px 10px; font-size: 11px; }}
+            .insight-grid {{ grid-template-columns: 1fr 1fr; }}
+            .back-btn {{ font-size: 12px; padding: 6px 12px; }}
+        }}
+
         @media print {{
             body {{ background: white; }}
             .container {{ max-width: none; }}
@@ -1445,26 +1616,35 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
             <div class="desc">{description}</div>
         </div>
 
-        <!-- KPI Row -->
+        <!-- KPI Row: Five-Element AI Impact Scores -->
         <div class="kpi-row">
-            <div class="kpi-card tasks">
-                <div class="kpi-label">Tasks</div>
-                <div class="kpi-value" id="kpi-tasks">0</div>
+            <div class="kpi-card" style="border-left-color:#3B82F6">
+                <div class="kpi-label">Efficiency &amp; Time</div>
+                <div class="kpi-value" id="kpi-efficiency" style="color:#3B82F6">0</div>
+                <div class="kpi-sub">out of 9</div>
             </div>
-            <div class="kpi-card skills">
-                <div class="kpi-label">Skills</div>
-                <div class="kpi-value" id="kpi-skills">0</div>
+            <div class="kpi-card" style="border-left-color:#10B981">
+                <div class="kpi-label">Quality &amp; Accuracy</div>
+                <div class="kpi-value" id="kpi-quality" style="color:#10B981">0</div>
+                <div class="kpi-sub">out of 9</div>
             </div>
-            <div class="kpi-card knowledge">
-                <div class="kpi-label">Knowledge Areas</div>
-                <div class="kpi-value" id="kpi-knowledge">0</div>
+            <div class="kpi-card" style="border-left-color:#F59E0B">
+                <div class="kpi-label">Cost Impact</div>
+                <div class="kpi-value" id="kpi-cost" style="color:#F59E0B">0</div>
+                <div class="kpi-sub">out of 9</div>
             </div>
-            <div class="kpi-card abilities">
-                <div class="kpi-label">Abilities</div>
-                <div class="kpi-value" id="kpi-abilities">0</div>
+            <div class="kpi-card" style="border-left-color:#8B5CF6">
+                <div class="kpi-label">Revenue &amp; Innovation</div>
+                <div class="kpi-value" id="kpi-revenue" style="color:#8B5CF6">0</div>
+                <div class="kpi-sub">out of 9</div>
             </div>
-            <div class="kpi-card ai-impact">
-                <div class="kpi-label">AI Impact Score</div>
+            <div class="kpi-card" style="border-left-color:#EC4899">
+                <div class="kpi-label">Service &amp; Satisfaction</div>
+                <div class="kpi-value" id="kpi-service" style="color:#EC4899">0</div>
+                <div class="kpi-sub">out of 9</div>
+            </div>
+            <div class="kpi-card ai-impact" style="border-left-color:#EF4444">
+                <div class="kpi-label">Overall AI Impact</div>
                 <div class="kpi-value" id="kpi-ai-score" style="color:var(--ai-color)">0</div>
                 <div class="kpi-sub" id="kpi-ai-level"></div>
             </div>
@@ -1555,22 +1735,30 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
             <div class="trend-card" style="border-left: 4px solid var(--ai-color);">
                 <h3>AI Impact on This Occupation</h3>
                 <p style="font-size:14px; color:var(--text-secondary); line-height:1.8;" id="analysis-ai-summary"></p>
-                <div style="margin-top:14px; display:flex; gap:20px; flex-wrap:wrap;">
+                <div style="margin-top:14px; display:flex; gap:16px; flex-wrap:wrap;">
                     <div style="text-align:center;">
                         <div style="font-size:28px; font-weight:800; color:var(--ai-color);" id="analysis-ai-score">0</div>
                         <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase;">Impact Score</div>
                     </div>
                     <div style="text-align:center;">
-                        <div style="font-size:28px; font-weight:800; color:#EF4444;" id="analysis-ai-auto">0</div>
-                        <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase;">Tasks Automatable</div>
+                        <div style="font-size:22px; font-weight:700; color:#3B82F6;" id="analysis-ai-efficiency">0</div>
+                        <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase;">Efficiency</div>
                     </div>
                     <div style="text-align:center;">
-                        <div style="font-size:28px; font-weight:800; color:#F59E0B;" id="analysis-ai-augment">0</div>
-                        <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase;">Tasks Augmentable</div>
+                        <div style="font-size:22px; font-weight:700; color:#10B981;" id="analysis-ai-quality">0</div>
+                        <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase;">Quality</div>
                     </div>
                     <div style="text-align:center;">
-                        <div style="font-size:28px; font-weight:800; color:#10B981;" id="analysis-ai-human">0</div>
-                        <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase;">Human-Essential</div>
+                        <div style="font-size:22px; font-weight:700; color:#F59E0B;" id="analysis-ai-cost">0</div>
+                        <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase;">Cost</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-size:22px; font-weight:700; color:#8B5CF6;" id="analysis-ai-revenue">0</div>
+                        <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase;">Revenue</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-size:22px; font-weight:700; color:#EC4899;" id="analysis-ai-service">0</div>
+                        <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase;">Service</div>
                     </div>
                 </div>
             </div>
@@ -1656,7 +1844,7 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
         <div class="tab-content" id="tab-ai-impact">
             <!-- AI Summary -->
             <div class="ai-summary-card">
-                <h2>AI Impact Assessment</h2>
+                <h2>AI Business Impact Assessment</h2>
                 <div class="summary-text" id="ai-summary-text"></div>
                 <div class="ai-score-ring">
                     <div>
@@ -1683,7 +1871,19 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
                 </div>
             </div>
 
-            <!-- AI Impact Distribution Chart -->
+            <!-- Five-Element Radar + Bar Charts -->
+            <div class="chart-row">
+                <div class="chart-card">
+                    <h3><span class="dot" style="background:var(--ai-color)"></span> Five-Element Impact Profile</h3>
+                    <canvas id="chart-ai-radar"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3><span class="dot" style="background:var(--ai-color)"></span> Element Scores (0-9)</h3>
+                    <canvas id="chart-ai-elements-bar"></canvas>
+                </div>
+            </div>
+
+            <!-- AI Distribution + Task Classification Charts -->
             <div class="chart-row">
                 <div class="chart-card">
                     <h3><span class="dot" style="background:var(--ai-color)"></span> Task AI Impact Distribution</h3>
@@ -1713,17 +1913,17 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
                 <div class="ai-skill-grid" id="ai-skills-grid"></div>
             </div>
 
-            <!-- Per-Task AI Analysis Table -->
+            <!-- Per-Task Five-Element Scoring Table -->
             <div class="table-card">
-                <div class="section-label">Task-Level AI Impact Analysis</div>
+                <div class="section-label">Task-Level Impact Analysis</div>
                 <input type="text" class="search-box" placeholder="Search tasks..." oninput="filterAITasks(this.value)">
-                <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+                <div class="ai-filter-row">
                     <button class="badge" style="cursor:pointer; padding:4px 12px;" onclick="filterAIClass('all')">All</button>
-                    <button class="badge badge-automate" style="cursor:pointer; padding:4px 12px;" onclick="filterAIClass('automate')">Automate</button>
-                    <button class="badge badge-augment" style="cursor:pointer; padding:4px 12px;" onclick="filterAIClass('augment')">Augment</button>
-                    <button class="badge badge-human" style="cursor:pointer; padding:4px 12px;" onclick="filterAIClass('human')">Human-Essential</button>
+                    <button class="badge badge-automate" style="cursor:pointer; padding:4px 12px;" onclick="filterAIClass('automate')">High Impact</button>
+                    <button class="badge badge-augment" style="cursor:pointer; padding:4px 12px;" onclick="filterAIClass('augment')">Moderate</button>
+                    <button class="badge badge-human" style="cursor:pointer; padding:4px 12px;" onclick="filterAIClass('human')">Low Impact</button>
                 </div>
-                <div id="ai-tasks-table"></div>
+                <div class="table-responsive" id="ai-tasks-table"></div>
             </div>
         </div>
 
@@ -1793,6 +1993,7 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
     const BLS_BY_STATE = {bls_state_json};
     const BLS_BY_INDUSTRY = {bls_industry_json};
     const BLS_NATIONAL = {bls_national_val};
+    const ELEMENT_SCORES = {element_scores_json};
 
     const COLORS = {{
         skill: '#3B82F6',
@@ -1955,9 +2156,11 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
         // AI Impact summary on Analysis tab
         document.getElementById('analysis-ai-summary').innerHTML = AI_IMPACT.role_summary;
         document.getElementById('analysis-ai-score').textContent = AI_IMPACT.overall_score;
-        document.getElementById('analysis-ai-auto').textContent = AI_IMPACT.distribution.automate;
-        document.getElementById('analysis-ai-augment').textContent = AI_IMPACT.distribution.augment;
-        document.getElementById('analysis-ai-human').textContent = AI_IMPACT.distribution.human;
+        document.getElementById('analysis-ai-efficiency').textContent = (ELEMENT_SCORES.efficiency || 0).toFixed(1);
+        document.getElementById('analysis-ai-quality').textContent = (ELEMENT_SCORES.quality || 0).toFixed(1);
+        document.getElementById('analysis-ai-cost').textContent = (ELEMENT_SCORES.cost || 0).toFixed(1);
+        document.getElementById('analysis-ai-revenue').textContent = (ELEMENT_SCORES.revenue || 0).toFixed(1);
+        document.getElementById('analysis-ai-service').textContent = (ELEMENT_SCORES.service || 0).toFixed(1);
 
         // ─── Narrative: Workforce Overview ────────────────────────────
         (function() {{
@@ -2178,16 +2381,17 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
         (function() {{
             const el = document.getElementById('narrative-ai-strategy-content');
             const title = SUMMARY.title || 'This occupation';
+            const es = ELEMENT_SCORES;
+            const score = AI_IMPACT.overall_score || 0;
+            const agents = AI_IMPACT.agents || [];
             const autoCount = AI_IMPACT.distribution.automate || 0;
             const augCount = AI_IMPACT.distribution.augment || 0;
             const humanCount = AI_IMPACT.distribution.human || 0;
             const totalTasks = autoCount + augCount + humanCount;
-            const score = AI_IMPACT.overall_score || 0;
-            const agents = AI_IMPACT.agents || [];
 
             let html = '<p>';
             if (score >= 70) {{
-                html += 'AI will significantly reshape the <strong>' + title + '</strong> role. With an impact score of <span class="highlight highlight-rose">' + score + '/100</span>, ';
+                html += 'AI will significantly reshape the <strong>' + title + '</strong> role. With an overall impact score of <span class="highlight highlight-rose">' + score + '/100</span>, ';
                 html += 'organizations should proactively develop transition plans. ';
             }} else if (score >= 40) {{
                 html += 'AI presents substantial augmentation opportunities for <strong>' + title + '</strong> professionals. With a moderate impact score of <span class="highlight highlight-amber">' + score + '/100</span>, ';
@@ -2198,18 +2402,38 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
             }}
             html += '</p>';
 
+            // Five-element breakdown narrative
+            const elements = [
+                {{name: 'Efficiency & Time Savings', val: es.efficiency || 0, color: 'blue'}},
+                {{name: 'Quality & Accuracy', val: es.quality || 0, color: 'green'}},
+                {{name: 'Cost Impact', val: es.cost || 0, color: 'amber'}},
+                {{name: 'Revenue & Innovation', val: es.revenue || 0, color: 'purple'}},
+                {{name: 'Service & Satisfaction', val: es.service || 0, color: 'rose'}}
+            ];
+            const sorted = [...elements].sort((a,b) => b.val - a.val);
+            const top = sorted[0];
+            const bottom = sorted[sorted.length - 1];
+
+            html += '<p><strong>Five-element analysis:</strong> The strongest AI opportunity is in ';
+            html += '<span class="highlight highlight-' + top.color + '">' + top.name + ' (' + top.val.toFixed(1) + '/9)</span>';
+            if (sorted.length > 1 && sorted[1].val >= 3) {{
+                html += ', followed by <strong>' + sorted[1].name + '</strong> (' + sorted[1].val.toFixed(1) + '/9)';
+            }}
+            html += '. The lowest impact area is <strong>' + bottom.name + '</strong> (' + bottom.val.toFixed(1) + '/9)';
+            html += ', suggesting this dimension requires more human judgment and oversight.</p>';
+
             if (totalTasks > 0) {{
                 const autoPct = ((autoCount / totalTasks) * 100).toFixed(0);
                 const augPct = ((augCount / totalTasks) * 100).toFixed(0);
                 const humanPct = ((humanCount / totalTasks) * 100).toFixed(0);
-                html += '<p>Of the <strong>' + totalTasks + ' tasks</strong> in this role: ';
-                html += '<span class="highlight highlight-rose">' + autoPct + '% are automatable</span>, ';
-                html += '<span class="highlight highlight-amber">' + augPct + '% can be augmented</span> by AI tools, and ';
-                html += '<span class="highlight highlight-green">' + humanPct + '% remain human-essential</span>. ';
+                html += '<p>Across <strong>' + totalTasks + ' tasks</strong>: ';
+                html += '<span class="highlight highlight-rose">' + autoPct + '% score as high-impact</span>, ';
+                html += '<span class="highlight highlight-amber">' + augPct + '% are moderate-impact</span>, and ';
+                html += '<span class="highlight highlight-green">' + humanPct + '% are low-impact</span>. ';
                 if (parseInt(augPct) > parseInt(autoPct)) {{
-                    html += 'The predominance of augmentable tasks suggests AI will primarily serve as a force multiplier, enabling professionals to handle greater volume and complexity rather than replacing them.';
+                    html += 'AI will primarily serve as a force multiplier, enabling professionals to handle greater volume and complexity rather than replacing them.';
                 }} else if (parseInt(autoPct) > 40) {{
-                    html += 'The high proportion of automatable tasks signals that role responsibilities will likely shift toward higher-value activities as routine work is automated.';
+                    html += 'The high proportion of high-impact tasks signals that role responsibilities will shift toward higher-value activities as routine work is automated.';
                 }}
                 html += '</p>';
             }}
@@ -2450,11 +2674,12 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
         btn.classList.add('active');
     }}
 
-    // ── KPIs ───────────────────────────────────────────────────────────
-    document.getElementById('kpi-tasks').textContent = TASKS.length;
-    document.getElementById('kpi-skills').textContent = SKILLS.length;
-    document.getElementById('kpi-knowledge').textContent = KNOWLEDGE.length;
-    document.getElementById('kpi-abilities').textContent = ABILITIES.length;
+    // ── KPIs (Five-Element Scores) ────────────────────────────────────
+    document.getElementById('kpi-efficiency').textContent = (ELEMENT_SCORES.efficiency || 0).toFixed(1);
+    document.getElementById('kpi-quality').textContent = (ELEMENT_SCORES.quality || 0).toFixed(1);
+    document.getElementById('kpi-cost').textContent = (ELEMENT_SCORES.cost || 0).toFixed(1);
+    document.getElementById('kpi-revenue').textContent = (ELEMENT_SCORES.revenue || 0).toFixed(1);
+    document.getElementById('kpi-service').textContent = (ELEMENT_SCORES.service || 0).toFixed(1);
     document.getElementById('kpi-ai-score').textContent = AI_IMPACT.overall_score;
     document.getElementById('kpi-ai-level').textContent = AI_IMPACT.impact_level + ' Impact';
 
@@ -2660,6 +2885,89 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
     document.getElementById('ai-metric-augment').textContent = dist.augment;
     document.getElementById('ai-metric-human').textContent = dist.human;
 
+    // ── Five-Element Radar Chart ──────────────────────────────────────
+    (function() {{
+        const es = ELEMENT_SCORES;
+        const ctx = document.getElementById('chart-ai-radar').getContext('2d');
+        new Chart(ctx, {{
+            type: 'radar',
+            data: {{
+                labels: ['Efficiency & Time', 'Quality & Accuracy', 'Cost Impact', 'Revenue & Innovation', 'Service & Satisfaction'],
+                datasets: [{{
+                    label: 'Element Score',
+                    data: [es.efficiency || 0, es.quality || 0, es.cost || 0, es.revenue || 0, es.service || 0],
+                    backgroundColor: 'rgba(236,72,153,0.2)',
+                    borderColor: '#EC4899',
+                    borderWidth: 2,
+                    pointBackgroundColor: '#EC4899',
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                }}]
+            }},
+            options: {{
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {{
+                    r: {{
+                        beginAtZero: true,
+                        max: 9,
+                        ticks: {{ stepSize: 3, font: {{ size: 11 }}, backdropColor: 'transparent' }},
+                        grid: {{ color: 'rgba(0,0,0,0.08)' }},
+                        pointLabels: {{ font: {{ size: 11, weight: 600 }}, color: '#374151' }},
+                        angleLines: {{ color: 'rgba(0,0,0,0.08)' }}
+                    }}
+                }},
+                plugins: {{
+                    legend: {{ display: false }},
+                    tooltip: {{
+                        callbacks: {{
+                            label: ctx => ctx.dataset.label + ': ' + ctx.parsed.r.toFixed(1) + ' / 9'
+                        }}
+                    }}
+                }}
+            }}
+        }});
+    }})();
+
+    // ── Five-Element Bar Chart ────────────────────────────────────────
+    (function() {{
+        const es = ELEMENT_SCORES;
+        const labels = ['Efficiency', 'Quality', 'Cost', 'Revenue', 'Service'];
+        const values = [es.efficiency || 0, es.quality || 0, es.cost || 0, es.revenue || 0, es.service || 0];
+        const colors = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
+
+        const ctx = document.getElementById('chart-ai-elements-bar').getContext('2d');
+        new Chart(ctx, {{
+            type: 'bar',
+            data: {{
+                labels: labels,
+                datasets: [{{
+                    data: values,
+                    backgroundColor: colors.map(c => c + 'CC'),
+                    borderColor: colors,
+                    borderWidth: 1,
+                    borderRadius: 6,
+                }}]
+            }},
+            options: {{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {{
+                    legend: {{ display: false }},
+                    tooltip: {{
+                        callbacks: {{
+                            label: ctx => ctx.label + ': ' + ctx.parsed.y.toFixed(1) + ' / 9'
+                        }}
+                    }}
+                }},
+                scales: {{
+                    y: {{ beginAtZero: true, max: 9, ticks: {{ stepSize: 3 }}, grid: {{ color: '#f3f4f6' }} }},
+                    x: {{ grid: {{ display: false }} }}
+                }}
+            }}
+        }});
+    }})();
+
     // AI Distribution doughnut
     (function() {{
         const d = AI_IMPACT.distribution;
@@ -2667,7 +2975,7 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
         new Chart(ctx, {{
             type: 'doughnut',
             data: {{
-                labels: ['AI Can Automate', 'AI Can Augment', 'Human-Essential'],
+                labels: ['High Impact (Automate)', 'Moderate (Augment)', 'Low Impact (Human)'],
                 datasets: [{{
                     data: [d.automate, d.augment, d.human],
                     backgroundColor: [COLORS.automate + 'CC', COLORS.augment + 'CC', COLORS.human + 'CC'],
@@ -2698,30 +3006,26 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
         }});
     }})();
 
-    // AI tasks horizontal bar — importance by classification
+    // AI tasks horizontal bar — avg score by task
     (function() {{
         const ta = AI_IMPACT.task_analysis;
-        const autoTasks = ta.filter(t => t.classification === 'automate').sort((a,b) => b.importance - a.importance).slice(0, 8);
-        const augmentTasks = ta.filter(t => t.classification === 'augment').sort((a,b) => b.importance - a.importance).slice(0, 8);
-        const humanTasks = ta.filter(t => t.classification === 'human').sort((a,b) => b.importance - a.importance).slice(0, 8);
-
         const truncate = (s, n) => s.length > n ? s.substring(0, n) + '...' : s;
-        const all = [...autoTasks, ...augmentTasks, ...humanTasks].sort((a,b) => b.importance - a.importance).slice(0, 15);
+        const sorted = [...ta].sort((a,b) => b.avg_score - a.avg_score).slice(0, 15);
 
         const ctx = document.getElementById('chart-ai-tasks-bar').getContext('2d');
         new Chart(ctx, {{
             type: 'bar',
             data: {{
-                labels: all.map(t => truncate(t.statement, 55)),
+                labels: sorted.map(t => truncate(t.statement, 55)),
                 datasets: [{{
-                    data: all.map(t => t.importance),
-                    backgroundColor: all.map(t =>
-                        t.classification === 'automate' ? COLORS.automate + 'CC' :
-                        t.classification === 'human' ? COLORS.human + 'CC' : COLORS.augment + 'CC'
+                    data: sorted.map(t => t.avg_score),
+                    backgroundColor: sorted.map(t =>
+                        t.avg_score >= 5 ? COLORS.automate + 'CC' :
+                        t.avg_score >= 2.5 ? COLORS.augment + 'CC' : COLORS.human + 'CC'
                     ),
-                    borderColor: all.map(t =>
-                        t.classification === 'automate' ? COLORS.automate :
-                        t.classification === 'human' ? COLORS.human : COLORS.augment
+                    borderColor: sorted.map(t =>
+                        t.avg_score >= 5 ? COLORS.automate :
+                        t.avg_score >= 2.5 ? COLORS.augment : COLORS.human
                     ),
                     borderWidth: 1,
                     borderRadius: 4,
@@ -2737,19 +3041,20 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
                         callbacks: {{
                             title: ctx => {{
                                 const idx = ctx[0].dataIndex;
-                                return all[idx].statement;
+                                return sorted[idx].statement;
                             }},
                             label: ctx => {{
                                 const idx = ctx.dataIndex;
-                                const t = all[idx];
-                                return ['Importance: ' + t.importance.toFixed(0),
-                                        'Classification: ' + t.classification.charAt(0).toUpperCase() + t.classification.slice(1)];
+                                const t = sorted[idx];
+                                return ['Avg Score: ' + t.avg_score.toFixed(1) + ' / 9',
+                                        'Efficiency: ' + t.efficiency + '  Quality: ' + t.quality,
+                                        'Cost: ' + t.cost + '  Revenue: ' + t.revenue + '  Service: ' + t.service];
                             }}
                         }}
                     }}
                 }},
                 scales: {{
-                    x: {{ beginAtZero: true, max: 100, grid: {{ color: '#f3f4f6' }} }},
+                    x: {{ beginAtZero: true, max: 9, grid: {{ color: '#f3f4f6' }} }},
                     y: {{ ticks: {{ font: {{ size: 10 }} }}, grid: {{ display: false }} }}
                 }}
             }}
@@ -2789,11 +3094,27 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
         `).join('');
     }})();
 
-    // AI Tasks table
+    // ── Task-Level Five-Element Scoring Table ─────────────────────────
     let aiTaskFilter = '';
     let aiClassFilter = 'all';
-    let aiSortCol = 'importance';
+    let aiSortCol = 'avg_score';
     let aiSortDir = 'desc';
+
+    function scoreColor(v) {{
+        if (v >= 7) return '#DC2626';
+        if (v >= 5) return '#F59E0B';
+        if (v >= 3) return '#3B82F6';
+        if (v >= 1) return '#10B981';
+        return '#9CA3AF';
+    }}
+
+    function scoreBg(v) {{
+        if (v >= 7) return 'rgba(220,38,38,0.12)';
+        if (v >= 5) return 'rgba(245,158,11,0.12)';
+        if (v >= 3) return 'rgba(59,130,246,0.12)';
+        if (v >= 1) return 'rgba(16,185,129,0.12)';
+        return 'rgba(156,163,175,0.08)';
+    }}
 
     function renderAITasks() {{
         let data = AI_IMPACT.task_analysis.filter(t => {{
@@ -2813,21 +3134,24 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
         const arrow = col => aiSortCol === col ? (aiSortDir === 'asc' ? ' ▲' : ' ▼') : '';
         let html = '<table>';
         html += '<thead><tr>';
-        html += '<th onclick="sortAITasks(\\'statement\\')">Task' + arrow('statement') + '</th>';
-        html += '<th onclick="sortAITasks(\\'classification\\')" style="width:130px">AI Impact' + arrow('classification') + '</th>';
-        html += '<th onclick="sortAITasks(\\'confidence\\')" style="width:110px">Confidence' + arrow('confidence') + '</th>';
-        html += '<th onclick="sortAITasks(\\'importance\\')" style="width:120px">Importance' + arrow('importance') + '</th>';
+        html += '<th onclick="sortAITasks(\\'statement\\')" style="min-width:200px">Task' + arrow('statement') + '</th>';
+        html += '<th onclick="sortAITasks(\\'efficiency\\')" class="score-cell">Efficiency' + arrow('efficiency') + '</th>';
+        html += '<th onclick="sortAITasks(\\'quality\\')" class="score-cell">Quality' + arrow('quality') + '</th>';
+        html += '<th onclick="sortAITasks(\\'cost\\')" class="score-cell">Cost' + arrow('cost') + '</th>';
+        html += '<th onclick="sortAITasks(\\'revenue\\')" class="score-cell">Revenue' + arrow('revenue') + '</th>';
+        html += '<th onclick="sortAITasks(\\'service\\')" class="score-cell">Service' + arrow('service') + '</th>';
+        html += '<th onclick="sortAITasks(\\'avg_score\\')" class="score-cell" style="font-weight:700">Avg' + arrow('avg_score') + '</th>';
         html += '</tr></thead><tbody>';
 
         data.forEach(t => {{
-            const clsLabel = t.classification === 'automate' ? 'Automate' : t.classification === 'human' ? 'Human-Essential' : 'Augment';
-            const clsBadge = 'badge-' + t.classification;
-            const color = COLORS[t.classification];
             html += '<tr>';
-            html += '<td title="' + t.rationale.replace(/"/g, '&quot;') + '">' + t.statement + '</td>';
-            html += '<td><span class="badge ' + clsBadge + '">' + clsLabel + '</span></td>';
-            html += '<td><div class="score-row"><div class="score-bar" style="flex:1"><div class="score-fill" style="width:' + t.confidence + '%;background:#9CA3AF"></div></div><span>' + t.confidence + '%</span></div></td>';
-            html += '<td><div class="score-row"><div class="score-bar" style="flex:1"><div class="score-fill" style="width:' + t.importance + '%;background:' + color + '"></div></div><span>' + t.importance.toFixed(0) + '</span></div></td>';
+            html += '<td>' + t.statement + '</td>';
+            ['efficiency','quality','cost','revenue','service'].forEach(key => {{
+                const v = t[key] || 0;
+                html += '<td class="score-cell" style="background:' + scoreBg(v) + ';color:' + scoreColor(v) + ';font-weight:700;text-align:center">' + v + '</td>';
+            }});
+            const avg = t.avg_score || 0;
+            html += '<td class="score-cell" style="background:' + scoreBg(avg) + ';color:' + scoreColor(avg) + ';font-weight:800;text-align:center;font-size:14px">' + avg.toFixed(1) + '</td>';
             html += '</tr>';
         }});
 

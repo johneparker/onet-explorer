@@ -124,7 +124,7 @@ def get_occupation_elements(code: str, element_type: str, api_key: str) -> list:
 
 
 def get_occupation_summary(code: str, api_key: str) -> dict:
-    """Fetch the occupation summary/description."""
+    """Fetch the occupation summary/description including bright outlook."""
     data = make_request(
         f"online/occupations/{quote(code, safe='')}",
         api_key
@@ -133,7 +133,344 @@ def get_occupation_summary(code: str, api_key: str) -> dict:
         "title": data.get("title", ""),
         "description": data.get("description", ""),
         "code": data.get("code", code),
+        "bright_outlook": data.get("bright_outlook", []),
+        "is_bright_outlook": data.get("tags", {}).get("bright_outlook", False),
+        "sample_titles": data.get("sample_of_reported_titles", []),
     }
+
+
+def get_education_requirements(code: str, api_key: str) -> list:
+    """Fetch education requirements for an occupation."""
+    data = make_request(
+        f"online/occupations/{quote(code, safe='')}/details/education",
+        api_key
+    )
+    return data.get("response", [])
+
+
+def get_job_zone(code: str, api_key: str) -> dict:
+    """Fetch job zone info (preparation level, experience, training)."""
+    data = make_request(
+        f"online/occupations/{quote(code, safe='')}/details/job_zone",
+        api_key
+    )
+    return {
+        "code": data.get("code", 0),
+        "title": data.get("title", ""),
+        "education": data.get("education", ""),
+        "experience": data.get("related_experience", ""),
+        "training": data.get("job_training", ""),
+    }
+
+
+def get_hot_technologies(code: str, api_key: str) -> list:
+    """Fetch hot/in-demand technologies for an occupation."""
+    raw = _fetch_all_pages(
+        f"online/occupations/{quote(code, safe='')}/hot_technology",
+        api_key, "example"
+    )
+    techs = []
+    for t in raw:
+        techs.append({
+            "title": t.get("title", ""),
+            "hot_technology": t.get("hot_technology", False),
+            "in_demand": t.get("in_demand", False),
+            "percentage": t.get("percentage", 0),
+        })
+    return sorted(techs, key=lambda x: x["percentage"], reverse=True)
+
+
+def get_occupation_industries(code: str, api_key: str) -> list:
+    """Find all industries that employ this occupation with employment data.
+
+    Scans all 21 NAICS industry sectors via the O*NET industries endpoint
+    and returns industries where this occupation appears, with employment
+    distribution, growth projections, and estimated job openings.
+    """
+    # Get list of all industries (returns a plain list)
+    industries_list = make_request("online/industries/", api_key)
+    if isinstance(industries_list, dict):
+        industries_list = industries_list.get("industry", industries_list.get("industries", []))
+
+    results = []
+    for ind in industries_list:
+        ind_code = ind.get("code", "")
+        ind_title = ind.get("title", "")
+
+        # Fetch occupations in this industry (large page to avoid pagination overhead)
+        try:
+            data = make_request(
+                f"online/industries/{ind_code}",
+                api_key,
+                {"start": 1, "end": 500}
+            )
+            all_occs = data.get("occupation", []) if isinstance(data, dict) else []
+        except RuntimeError:
+            continue
+
+        # Search for our occupation in this industry
+        for occ in all_occs:
+            if occ.get("code") == code:
+                pct = occ.get("percent_employed", 0)
+                openings_total = occ.get("projected_openings", 0)
+                results.append({
+                    "industry_code": ind_code,
+                    "industry": ind_title,
+                    "percent_employed": pct,
+                    "projected_growth": occ.get("projected_growth", "N/A"),
+                    "projected_openings": openings_total,
+                    "estimated_industry_openings": int(openings_total * pct / 100) if pct and openings_total else 0,
+                    "bright_outlook": occ.get("tags", {}).get("bright_outlook", False),
+                })
+                break
+
+    return sorted(results, key=lambda x: x["percent_employed"], reverse=True)
+
+
+# ─── BLS OEWS Employment Data ────────────────────────────────────────────────
+
+BLS_API_URL = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
+
+# All 50 states + DC with FIPS codes
+_STATE_FIPS = {
+    "Alabama": "01", "Alaska": "02", "Arizona": "04", "Arkansas": "05",
+    "California": "06", "Colorado": "08", "Connecticut": "09", "Delaware": "10",
+    "District of Columbia": "11", "Florida": "12", "Georgia": "13", "Hawaii": "15",
+    "Idaho": "16", "Illinois": "17", "Indiana": "18", "Iowa": "19",
+    "Kansas": "20", "Kentucky": "21", "Louisiana": "22", "Maine": "23",
+    "Maryland": "24", "Massachusetts": "25", "Michigan": "26", "Minnesota": "27",
+    "Mississippi": "28", "Missouri": "29", "Montana": "30", "Nebraska": "31",
+    "Nevada": "32", "New Hampshire": "33", "New Jersey": "34", "New Mexico": "35",
+    "New York": "36", "North Carolina": "37", "North Dakota": "38", "Ohio": "39",
+    "Oklahoma": "40", "Oregon": "41", "Pennsylvania": "42", "Rhode Island": "44",
+    "South Carolina": "45", "South Dakota": "46", "Tennessee": "47", "Texas": "48",
+    "Utah": "49", "Vermont": "50", "Virginia": "51", "Washington": "53",
+    "West Virginia": "54", "Wisconsin": "55", "Wyoming": "56",
+}
+
+# Major NAICS industry sectors (3-digit codes that work with BLS OEWS)
+_BLS_INDUSTRIES = {
+    "111000": "Crop Production",
+    "112000": "Animal Production & Aquaculture",
+    "113000": "Forestry & Logging",
+    "211000": "Oil & Gas Extraction",
+    "212000": "Mining (except Oil & Gas)",
+    "221000": "Utilities",
+    "236000": "Construction of Buildings",
+    "237000": "Heavy & Civil Engineering Construction",
+    "238000": "Specialty Trade Contractors",
+    "311000": "Food Manufacturing",
+    "312000": "Beverage & Tobacco Manufacturing",
+    "313000": "Textile Mills",
+    "315000": "Apparel Manufacturing",
+    "321000": "Wood Product Manufacturing",
+    "322000": "Paper Manufacturing",
+    "323000": "Printing & Related Support",
+    "324000": "Petroleum & Coal Products",
+    "325000": "Chemical Manufacturing",
+    "326000": "Plastics & Rubber Products",
+    "327000": "Nonmetallic Mineral Products",
+    "331000": "Primary Metal Manufacturing",
+    "332000": "Fabricated Metal Products",
+    "333000": "Machinery Manufacturing",
+    "334000": "Computer & Electronic Products",
+    "335000": "Electrical Equipment & Appliances",
+    "336000": "Transportation Equipment",
+    "337000": "Furniture & Related Products",
+    "339000": "Miscellaneous Manufacturing",
+    "423000": "Merchant Wholesalers, Durable Goods",
+    "424000": "Merchant Wholesalers, Nondurable Goods",
+    "425000": "Wholesale Electronic Markets",
+    "441000": "Motor Vehicle & Parts Dealers",
+    "445000": "Food & Beverage Stores",
+    "452000": "General Merchandise Stores",
+    "481000": "Air Transportation",
+    "482000": "Rail Transportation",
+    "484000": "Truck Transportation",
+    "486000": "Pipeline Transportation",
+    "488000": "Support Activities for Transportation",
+    "491000": "Postal Service",
+    "492000": "Couriers & Messengers",
+    "493000": "Warehousing & Storage",
+    "511000": "Publishing Industries",
+    "512000": "Motion Picture & Sound Recording",
+    "515000": "Broadcasting",
+    "517000": "Telecommunications",
+    "518000": "Computing Infrastructure Providers & Data Processing",
+    "519000": "Web Search Portals & Other Information Services",
+    "521000": "Monetary Authorities – Central Bank",
+    "522000": "Credit Intermediation & Related",
+    "523000": "Securities & Financial Investments",
+    "524000": "Insurance Carriers & Related",
+    "525000": "Funds, Trusts & Other Financial Vehicles",
+    "531000": "Real Estate",
+    "532000": "Rental & Leasing Services",
+    "541000": "Professional, Scientific & Technical Services",
+    "551000": "Management of Companies & Enterprises",
+    "561000": "Administrative & Support Services",
+    "562000": "Waste Management & Remediation",
+    "611000": "Educational Services",
+    "621000": "Ambulatory Health Care Services",
+    "622000": "Hospitals",
+    "623000": "Nursing & Residential Care Facilities",
+    "624000": "Social Assistance",
+    "711000": "Performing Arts & Spectator Sports",
+    "712000": "Museums & Historical Sites",
+    "713000": "Amusement, Gambling & Recreation",
+    "721000": "Accommodation",
+    "722000": "Food Services & Drinking Places",
+    "811000": "Repair & Maintenance",
+    "812000": "Personal & Laundry Services",
+    "813000": "Religious, Civic & Professional Organizations",
+    "921000": "Executive & Legislative Offices",
+    "922000": "Justice, Public Order & Safety",
+    "923000": "Administration of Human Resource Programs",
+    "924000": "Administration of Environmental Programs",
+    "925000": "Community & Housing Programs",
+    "926000": "Administration of Economic Programs",
+    "928000": "National Security & International Affairs",
+    "999100": "Federal Government, Civilian",
+    "999200": "State Government",
+    "999300": "Local Government",
+}
+
+
+def _onet_to_bls_soc(onet_code: str) -> str:
+    """Convert O*NET code (e.g., '15-1252.00') to BLS SOC (e.g., '151252')."""
+    base = onet_code.split(".")[0]  # Remove .00 suffix
+    return base.replace("-", "")
+
+
+def _bls_post(series_ids: list, bls_api_key: str = "") -> dict:
+    """POST to BLS v2 API with up to 50 series IDs. Returns dict of series_id -> value."""
+    payload = json.dumps({
+        "seriesid": series_ids,
+        "startyear": "2023",
+        "endyear": "2024",
+    })
+    if bls_api_key:
+        payload_dict = json.loads(payload)
+        payload_dict["registrationkey"] = bls_api_key
+        payload = json.dumps(payload_dict)
+
+    req = Request(BLS_API_URL, data=payload.encode("utf-8"))
+    req.add_header("Content-Type", "application/json")
+
+    try:
+        with urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception:
+        return {}
+
+    results = {}
+    if data.get("status") == "REQUEST_NOT_PROCESSED":
+        # Rate limited or other processing error — return empty
+        return {}
+    if data.get("status") == "REQUEST_SUCCEEDED":
+        for series in data.get("Results", {}).get("series", []):
+            sid = series.get("seriesID", "")
+            series_data = series.get("data", [])
+            if series_data:
+                # Get most recent annual data (period M13 = annual mean)
+                annual = [d for d in series_data if d.get("period") == "M13"]
+                if annual:
+                    val = annual[0].get("value", "0")
+                    try:
+                        results[sid] = int(float(val.replace(",", "")))
+                    except (ValueError, TypeError):
+                        pass
+                elif series_data:
+                    # Fall back to most recent available data point
+                    val = series_data[0].get("value", "0")
+                    try:
+                        results[sid] = int(float(val.replace(",", "")))
+                    except (ValueError, TypeError):
+                        pass
+    return results
+
+
+def get_bls_employment_by_state(onet_code: str, bls_api_key: str = "") -> list:
+    """Fetch employment counts for an occupation by state from BLS OEWS.
+
+    Returns list of dicts: {state, fips, employment}
+    sorted by employment descending.
+    """
+    soc = _onet_to_bls_soc(onet_code)
+
+    # Build series IDs: OEUS{FIPS2}00000000000{SOC6}01
+    states_list = list(_STATE_FIPS.items())
+    series_map = {}
+    for state_name, fips in states_list:
+        sid = f"OEUS{fips}00000000000{soc}01"
+        series_map[sid] = {"state": state_name, "fips": fips}
+
+    # BLS allows max 50 series per request — need 2 batches for 51 states
+    all_sids = list(series_map.keys())
+    batch_size = 50
+    bls_results = {}
+    for i in range(0, len(all_sids), batch_size):
+        batch = all_sids[i:i + batch_size]
+        batch_results = _bls_post(batch, bls_api_key)
+        bls_results.update(batch_results)
+
+    # Build results
+    results = []
+    for sid, info in series_map.items():
+        emp = bls_results.get(sid)
+        if emp is not None and emp > 0:
+            results.append({
+                "state": info["state"],
+                "fips": info["fips"],
+                "employment": emp,
+            })
+
+    return sorted(results, key=lambda x: x["employment"], reverse=True)
+
+
+def get_bls_employment_by_industry(onet_code: str, bls_api_key: str = "") -> list:
+    """Fetch national employment counts for an occupation by industry from BLS OEWS.
+
+    Returns list of dicts: {industry_code, industry, employment}
+    sorted by employment descending.
+    """
+    soc = _onet_to_bls_soc(onet_code)
+
+    # Build series IDs: OEUN0000000{NAICS6}{SOC6}01
+    series_map = {}
+    for naics, name in _BLS_INDUSTRIES.items():
+        sid = f"OEUN0000000{naics}{soc}01"
+        series_map[sid] = {"industry_code": naics, "industry": name}
+
+    # Batch requests (50 per batch)
+    all_sids = list(series_map.keys())
+    batch_size = 50
+    bls_results = {}
+    for i in range(0, len(all_sids), batch_size):
+        batch = all_sids[i:i + batch_size]
+        batch_results = _bls_post(batch, bls_api_key)
+        bls_results.update(batch_results)
+
+    # Build results
+    results = []
+    for sid, info in series_map.items():
+        emp = bls_results.get(sid)
+        if emp is not None and emp > 0:
+            results.append({
+                "industry_code": info["industry_code"],
+                "industry": info["industry"],
+                "employment": emp,
+            })
+
+    return sorted(results, key=lambda x: x["employment"], reverse=True)
+
+
+def get_bls_national_employment(onet_code: str, bls_api_key: str = "") -> int:
+    """Fetch the national total employment for an occupation from BLS OEWS."""
+    soc = _onet_to_bls_soc(onet_code)
+    # Format: OE(2) + U(1) + N(1) + area_code(7=0000000) + industry(6=000000) + SOC(6) + datatype(2=01) = 25 chars
+    sid = f"OEUN0000000000000{soc}01"
+    results = _bls_post([sid], bls_api_key)
+    return results.get(sid, 0)
 
 
 # ─── AI Impact Analysis Engine ───────────────────────────────────────────────
@@ -541,7 +878,11 @@ def analyze_ai_impact(summary: dict, tasks: list, skills: list,
 # ─── Dashboard Generator ─────────────────────────────────────────────────────
 
 def generate_dashboard(summary: dict, tasks: list, skills: list,
-                       knowledge: list, abilities: list, ai_impact: dict) -> str:
+                       knowledge: list, abilities: list, ai_impact: dict,
+                       industries: list = None, education: list = None,
+                       job_zone: dict = None, technologies: list = None,
+                       bls_by_state: list = None, bls_by_industry: list = None,
+                       bls_national: int = 0) -> str:
     """Generate a self-contained interactive HTML dashboard."""
 
     title = html.escape(summary["title"])
@@ -555,6 +896,14 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
     knowledge_json = json.dumps(knowledge)
     abilities_json = json.dumps(abilities)
     ai_impact_json = json.dumps(ai_impact)
+    industries_json = json.dumps(industries or [])
+    education_json = json.dumps(education or [])
+    job_zone_json = json.dumps(job_zone or {})
+    technologies_json = json.dumps((technologies or [])[:20])  # top 20 techs
+    summary_json = json.dumps(summary)
+    bls_state_json = json.dumps(bls_by_state or [])
+    bls_industry_json = json.dumps(bls_by_industry or [])
+    bls_national_val = bls_national or 0
 
     return textwrap.dedent(f"""\
 <!DOCTYPE html>
@@ -861,6 +1210,81 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
         .outlook-card h3 {{ font-size: 15px; font-weight: 600; margin-bottom: 10px; }}
         .outlook-card p {{ font-size: 14px; color: var(--text-secondary); line-height: 1.8; }}
 
+        /* Analysis tab */
+        .analysis-hero {{
+            background: linear-gradient(135deg, #1B2A4A 0%, #1e3a5f 100%);
+            color: white;
+            border-radius: var(--radius);
+            padding: 28px 32px;
+            margin-bottom: var(--gap);
+        }}
+        .analysis-hero h2 {{ font-size: 20px; font-weight: 700; margin-bottom: 10px; }}
+        .analysis-hero .desc {{ font-size: 14px; line-height: 1.8; opacity: 0.92; }}
+        .analysis-hero .badges {{ display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }}
+        .bright-badge {{
+            display: inline-flex; align-items: center; gap: 6px;
+            background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.4);
+            color: #6EE7B7; padding: 4px 12px; border-radius: 20px;
+            font-size: 12px; font-weight: 600;
+        }}
+        .sample-titles {{ font-size: 12px; opacity: 0.7; margin-top: 10px; }}
+        .info-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: var(--gap);
+            margin-bottom: var(--gap);
+        }}
+        .info-card {{
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 22px 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }}
+        .info-card h4 {{ font-size: 13px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }}
+        .info-card .info-value {{ font-size: 15px; font-weight: 600; margin-bottom: 4px; }}
+        .info-card .info-detail {{ font-size: 13px; color: var(--text-secondary); line-height: 1.6; }}
+        .tech-list {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+        .tech-badge {{
+            display: inline-flex; align-items: center; gap: 6px;
+            background: #EFF6FF; border: 1px solid #BFDBFE;
+            color: #1E40AF; padding: 5px 12px; border-radius: 8px;
+            font-size: 12px; font-weight: 500;
+        }}
+        .tech-badge.hot {{ background: #FEF3C7; border-color: #FCD34D; color: #92400E; }}
+        .tech-pct {{ font-size: 10px; opacity: 0.7; }}
+        .trend-card {{
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            margin-bottom: var(--gap);
+        }}
+        .trend-card h3 {{ font-size: 15px; font-weight: 600; margin-bottom: 8px; }}
+        .trend-kpis {{ display: flex; gap: 32px; flex-wrap: wrap; margin-bottom: 16px; }}
+        .trend-kpi {{ text-align: center; }}
+        .trend-kpi .val {{ font-size: 28px; font-weight: 800; color: var(--accent); }}
+        .trend-kpi .lbl {{ font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }}
+
+        /* Jobs tab */
+        .jobs-summary {{
+            background: linear-gradient(135deg, #065F46 0%, #047857 100%);
+            color: white; border-radius: var(--radius);
+            padding: 24px 32px; margin-bottom: var(--gap);
+            display: flex; gap: 32px; flex-wrap: wrap; align-items: center;
+        }}
+        .jobs-summary .jobs-metric {{ text-align: center; }}
+        .jobs-summary .jobs-metric .val {{ font-size: 30px; font-weight: 800; }}
+        .jobs-summary .jobs-metric .lbl {{ font-size: 11px; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; }}
+        .growth-badge {{
+            display: inline-block; padding: 2px 10px; border-radius: 12px;
+            font-size: 11px; font-weight: 600;
+        }}
+        .growth-much-faster {{ background: #D1FAE5; color: #065F46; }}
+        .growth-faster {{ background: #DBEAFE; color: #1E40AF; }}
+        .growth-average {{ background: #F3F4F6; color: #4B5563; }}
+        .growth-slower {{ background: #FEF3C7; color: #92400E; }}
+        .growth-decline {{ background: #FEE2E2; color: #991B1B; }}
+
         .section-label {{
             font-size: 13px;
             font-weight: 700;
@@ -935,16 +1359,134 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
 
         <!-- Tab Navigation -->
         <div class="tab-bar">
-            <button class="tab active" onclick="switchTab('overview', this)">Overview</button>
-            <button class="tab" onclick="switchTab('ai-impact', this)">AI Impact</button>
+            <button class="tab active" onclick="switchTab('analysis', this)">Analysis</button>
+            <button class="tab" onclick="switchTab('jobs', this)">Jobs</button>
+            <button class="tab" onclick="switchTab('overview', this)">Overview</button>
+            <button class="tab ai-tab" onclick="switchTab('ai-impact', this)">AI Impact</button>
             <button class="tab" onclick="switchTab('tasks', this)">Tasks</button>
             <button class="tab" onclick="switchTab('skills', this)">Skills</button>
             <button class="tab" onclick="switchTab('knowledge', this)">Knowledge</button>
             <button class="tab" onclick="switchTab('abilities', this)">Abilities</button>
         </div>
 
+        <!-- Analysis Tab -->
+        <div class="tab-content active" id="tab-analysis">
+            <!-- Occupation Hero -->
+            <div class="analysis-hero">
+                <h2>{title}</h2>
+                <div class="desc">{description}</div>
+                <div class="badges" id="analysis-badges"></div>
+                <div class="sample-titles" id="analysis-sample-titles"></div>
+            </div>
+
+            <!-- Key Facts -->
+            <div class="info-grid" id="analysis-info-grid">
+                <div class="info-card" id="card-education">
+                    <h4>Education</h4>
+                    <div id="education-content"></div>
+                </div>
+                <div class="info-card" id="card-jobzone">
+                    <h4>Preparation Level</h4>
+                    <div id="jobzone-content"></div>
+                </div>
+                <div class="info-card" id="card-outlook">
+                    <h4>Employment Outlook</h4>
+                    <div id="outlook-content"></div>
+                </div>
+            </div>
+
+            <!-- Technologies -->
+            <div class="table-card">
+                <h3>In-Demand Technologies &amp; Tools</h3>
+                <div class="tech-list" id="tech-list"></div>
+            </div>
+
+            <!-- Industries -->
+            <div class="chart-row">
+                <div class="chart-card">
+                    <h3><span class="dot" style="background:#3B82F6"></span> Top Industries by Employment Share</h3>
+                    <canvas id="chart-analysis-industries"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3><span class="dot" style="background:#10B981"></span> Employment Trends</h3>
+                    <div class="trend-kpis" id="trend-kpis"></div>
+                    <canvas id="chart-analysis-trends"></canvas>
+                </div>
+            </div>
+
+            <!-- AI Impact Summary for Analysis tab -->
+            <div class="trend-card" style="border-left: 4px solid var(--ai-color);">
+                <h3>AI Impact on This Occupation</h3>
+                <p style="font-size:14px; color:var(--text-secondary); line-height:1.8;" id="analysis-ai-summary"></p>
+                <div style="margin-top:14px; display:flex; gap:20px; flex-wrap:wrap;">
+                    <div style="text-align:center;">
+                        <div style="font-size:28px; font-weight:800; color:var(--ai-color);" id="analysis-ai-score">0</div>
+                        <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase;">Impact Score</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-size:28px; font-weight:800; color:#EF4444;" id="analysis-ai-auto">0</div>
+                        <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase;">Tasks Automatable</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-size:28px; font-weight:800; color:#F59E0B;" id="analysis-ai-augment">0</div>
+                        <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase;">Tasks Augmentable</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-size:28px; font-weight:800; color:#10B981;" id="analysis-ai-human">0</div>
+                        <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase;">Human-Essential</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Jobs Tab -->
+        <div class="tab-content" id="tab-jobs">
+            <!-- Jobs Summary Banner -->
+            <div class="jobs-summary" id="jobs-summary"></div>
+
+            <!-- Charts Row 1: State data -->
+            <div class="chart-row">
+                <div class="chart-card" style="flex:2">
+                    <h3><span class="dot" style="background:#3B82F6"></span> Employment by State — Top 20</h3>
+                    <div style="height:480px"><canvas id="chart-jobs-state-bar"></canvas></div>
+                </div>
+                <div class="chart-card" style="flex:1">
+                    <h3><span class="dot" style="background:#10B981"></span> State Employment Share</h3>
+                    <canvas id="chart-jobs-state-doughnut"></canvas>
+                </div>
+            </div>
+
+            <!-- Charts Row 2: Industry data -->
+            <div class="chart-row">
+                <div class="chart-card" style="flex:2">
+                    <h3><span class="dot" style="background:#8B5CF6"></span> Employment by Industry — Top 15</h3>
+                    <div style="height:440px"><canvas id="chart-jobs-industry-bar"></canvas></div>
+                </div>
+                <div class="chart-card" style="flex:1">
+                    <h3><span class="dot" style="background:#F59E0B"></span> Industry Employment Share</h3>
+                    <canvas id="chart-jobs-industry-doughnut"></canvas>
+                </div>
+            </div>
+
+            <!-- State Employment Table -->
+            <div class="table-card">
+                <h3>Employment by State — Full Data</h3>
+                <div id="jobs-state-table"></div>
+            </div>
+
+            <!-- Industry Employment Table -->
+            <div class="table-card">
+                <h3>Employment by Industry — Full Data</h3>
+                <div id="jobs-industry-table"></div>
+            </div>
+
+            <div style="text-align:center; color:var(--text-secondary); font-size:11px; margin-top:8px; padding:8px;">
+                Source: U.S. Bureau of Labor Statistics, Occupational Employment and Wage Statistics (OEWS)
+            </div>
+        </div>
+
         <!-- Overview Tab -->
-        <div class="tab-content active" id="tab-overview">
+        <div class="tab-content" id="tab-overview">
             <div class="chart-row">
                 <div class="chart-card">
                     <h3><span class="dot" style="background:var(--skill-color)"></span> Top Skills by Importance</h3>
@@ -1100,6 +1642,14 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
     const KNOWLEDGE = {knowledge_json};
     const ABILITIES = {abilities_json};
     const AI_IMPACT = {ai_impact_json};
+    const INDUSTRIES = {industries_json};
+    const EDUCATION = {education_json};
+    const JOB_ZONE = {job_zone_json};
+    const TECHNOLOGIES = {technologies_json};
+    const SUMMARY = {summary_json};
+    const BLS_BY_STATE = {bls_state_json};
+    const BLS_BY_INDUSTRY = {bls_industry_json};
+    const BLS_NATIONAL = {bls_national_val};
 
     const COLORS = {{
         skill: '#3B82F6',
@@ -1111,6 +1661,376 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
         augment: '#F59E0B',
         human: '#10B981',
     }};
+
+    // ── Analysis Tab ─────────────────────────────────────────────────
+    (function() {{
+        // Bright outlook badges
+        const badgesEl = document.getElementById('analysis-badges');
+        if (SUMMARY.is_bright_outlook && SUMMARY.bright_outlook) {{
+            badgesEl.innerHTML = SUMMARY.bright_outlook.map(b =>
+                '<span class="bright-badge">&#9733; ' + b.title + '</span>'
+            ).join('');
+        }}
+        // Sample titles
+        const samplesEl = document.getElementById('analysis-sample-titles');
+        if (SUMMARY.sample_titles && SUMMARY.sample_titles.length > 0) {{
+            samplesEl.textContent = 'Also known as: ' + SUMMARY.sample_titles.slice(0, 6).join(', ');
+        }}
+
+        // Education
+        const eduEl = document.getElementById('education-content');
+        if (EDUCATION.length > 0) {{
+            eduEl.innerHTML = EDUCATION.filter(e => e.percentage_of_respondents > 0)
+                .sort((a,b) => b.percentage_of_respondents - a.percentage_of_respondents)
+                .map(e => '<div class="info-value">' + e.title + ' <span style="color:var(--accent);font-size:13px;">(' + e.percentage_of_respondents + '%)</span></div>')
+                .join('');
+        }} else {{
+            eduEl.innerHTML = '<div class="info-detail">No education data available</div>';
+        }}
+
+        // Job zone
+        const jzEl = document.getElementById('jobzone-content');
+        if (JOB_ZONE.title) {{
+            jzEl.innerHTML =
+                '<div class="info-value">' + JOB_ZONE.title + '</div>' +
+                '<div class="info-detail" style="margin-top:6px">' + (JOB_ZONE.education || '') + '</div>';
+        }} else {{
+            jzEl.innerHTML = '<div class="info-detail">No job zone data available</div>';
+        }}
+
+        // Outlook summary
+        const outEl = document.getElementById('outlook-content');
+        if (INDUSTRIES.length > 0) {{
+            const growth = INDUSTRIES[0].projected_growth || 'N/A';
+            const openings = INDUSTRIES[0].projected_openings || 0;
+            const numIndustries = INDUSTRIES.length;
+            outEl.innerHTML =
+                '<div class="info-value">Growth: ' + growth + '</div>' +
+                '<div class="info-value">5-Year Openings: ' + openings.toLocaleString() + '</div>' +
+                '<div class="info-detail" style="margin-top:6px">Present in ' + numIndustries + ' industr' + (numIndustries === 1 ? 'y' : 'ies') + '</div>' +
+                (SUMMARY.is_bright_outlook ? '<div style="margin-top:8px;"><span class="bright-badge" style="background:rgba(16,185,129,0.15);color:#059669;border-color:#A7F3D0;">Bright Outlook</span></div>' : '');
+        }} else {{
+            outEl.innerHTML = '<div class="info-detail">No outlook data available</div>';
+        }}
+
+        // Technologies
+        const techEl = document.getElementById('tech-list');
+        if (TECHNOLOGIES.length > 0) {{
+            techEl.innerHTML = TECHNOLOGIES.slice(0, 15).map(t =>
+                '<span class="tech-badge' + (t.hot_technology ? ' hot' : '') + '">' +
+                t.title + ' <span class="tech-pct">' + (t.percentage > 0 ? t.percentage + '%' : '') + '</span>' +
+                '</span>'
+            ).join('');
+        }} else {{
+            techEl.innerHTML = '<span style="color:var(--text-secondary);font-size:13px;">No technology data available</span>';
+        }}
+
+        // Industries chart
+        if (INDUSTRIES.length > 0) {{
+            const top = INDUSTRIES.slice(0, 10);
+            const ctx = document.getElementById('chart-analysis-industries').getContext('2d');
+            new Chart(ctx, {{
+                type: 'bar',
+                data: {{
+                    labels: top.map(d => d.industry.length > 35 ? d.industry.substring(0,35) + '...' : d.industry),
+                    datasets: [{{
+                        data: top.map(d => d.percent_employed),
+                        backgroundColor: '#3B82F6CC',
+                        borderColor: '#3B82F6',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                    }}]
+                }},
+                options: {{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {{
+                        legend: {{ display: false }},
+                        tooltip: {{
+                            callbacks: {{
+                                title: ctx => {{ const i = ctx[0].dataIndex; return top[i].industry; }},
+                                label: ctx => 'Employment share: ' + ctx.parsed.x + '%'
+                            }}
+                        }}
+                    }},
+                    scales: {{
+                        x: {{ beginAtZero: true, title: {{ display: true, text: '% of Workers in This Occupation', font: {{ size: 11 }} }}, grid: {{ color: '#f3f4f6' }} }},
+                        y: {{ ticks: {{ font: {{ size: 11 }} }}, grid: {{ display: false }} }}
+                    }}
+                }}
+            }});
+        }}
+
+        // Trends chart — estimated openings by industry
+        if (INDUSTRIES.length > 0) {{
+            const total = INDUSTRIES[0].projected_openings || 0;
+            const numInd = INDUSTRIES.length;
+            const kpisEl = document.getElementById('trend-kpis');
+            kpisEl.innerHTML =
+                '<div class="trend-kpi"><div class="val">' + total.toLocaleString() + '</div><div class="lbl">Total 5-Year Openings</div></div>' +
+                '<div class="trend-kpi"><div class="val">' + numInd + '</div><div class="lbl">Industries Hiring</div></div>' +
+                '<div class="trend-kpi"><div class="val">' + (INDUSTRIES[0].projected_growth || 'N/A') + '</div><div class="lbl">Growth Rate</div></div>';
+
+            const topTrend = INDUSTRIES.filter(d => d.estimated_industry_openings > 0).slice(0, 8);
+            if (topTrend.length > 0) {{
+                const ctx2 = document.getElementById('chart-analysis-trends').getContext('2d');
+                new Chart(ctx2, {{
+                    type: 'bar',
+                    data: {{
+                        labels: topTrend.map(d => d.industry.length > 30 ? d.industry.substring(0,30) + '...' : d.industry),
+                        datasets: [{{
+                            data: topTrend.map(d => d.estimated_industry_openings),
+                            backgroundColor: '#10B981CC',
+                            borderColor: '#10B981',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                        }}]
+                    }},
+                    options: {{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        plugins: {{
+                            legend: {{ display: false }},
+                            tooltip: {{
+                                callbacks: {{
+                                    title: ctx => {{ const i = ctx[0].dataIndex; return topTrend[i].industry; }},
+                                    label: ctx => 'Estimated openings: ' + ctx.parsed.x.toLocaleString()
+                                }}
+                            }}
+                        }},
+                        scales: {{
+                            x: {{ beginAtZero: true, title: {{ display: true, text: 'Estimated 5-Year Openings', font: {{ size: 11 }} }}, grid: {{ color: '#f3f4f6' }} }},
+                            y: {{ ticks: {{ font: {{ size: 11 }} }}, grid: {{ display: false }} }}
+                        }}
+                    }}
+                }});
+            }}
+        }}
+
+        // AI Impact summary on Analysis tab
+        document.getElementById('analysis-ai-summary').innerHTML = AI_IMPACT.role_summary;
+        document.getElementById('analysis-ai-score').textContent = AI_IMPACT.overall_score;
+        document.getElementById('analysis-ai-auto').textContent = AI_IMPACT.distribution.automate;
+        document.getElementById('analysis-ai-augment').textContent = AI_IMPACT.distribution.augment;
+        document.getElementById('analysis-ai-human').textContent = AI_IMPACT.distribution.human;
+    }})();
+
+    // ── Jobs Tab (BLS OEWS Data) ───────────────────────────────────────
+    (function() {{
+        const hasBLS = BLS_BY_STATE.length > 0 || BLS_BY_INDUSTRY.length > 0;
+        if (!hasBLS) {{
+            document.getElementById('jobs-summary').innerHTML = '<div style="text-align:center;width:100%"><div style="font-size:16px;font-weight:600;">No BLS employment data available</div><div style="font-size:13px;opacity:0.8;margin-top:4px;">Bureau of Labor Statistics data was not found for this occupation.</div></div>';
+            return;
+        }}
+
+        const totalNational = BLS_NATIONAL || BLS_BY_STATE.reduce((s,d) => s + d.employment, 0);
+        const numStates = BLS_BY_STATE.length;
+        const numIndustries = BLS_BY_INDUSTRY.length;
+        const topState = BLS_BY_STATE.length > 0 ? BLS_BY_STATE[0] : null;
+        const topIndustry = BLS_BY_INDUSTRY.length > 0 ? BLS_BY_INDUSTRY[0] : null;
+
+        // Summary banner
+        let bannerHTML = '<div class="jobs-metric"><div class="val">' + totalNational.toLocaleString() + '</div><div class="lbl">National Employment</div></div>';
+        bannerHTML += '<div class="jobs-metric"><div class="val">' + numStates + '</div><div class="lbl">States with Jobs</div></div>';
+        bannerHTML += '<div class="jobs-metric"><div class="val">' + numIndustries + '</div><div class="lbl">Industries Hiring</div></div>';
+        if (topState) {{
+            bannerHTML += '<div class="jobs-metric"><div class="val">' + topState.state + '</div><div class="lbl">Top State (' + topState.employment.toLocaleString() + ')</div></div>';
+        }}
+        document.getElementById('jobs-summary').innerHTML = bannerHTML;
+
+        const palette = ['#3B82F6','#10B981','#F59E0B','#EC4899','#8B5CF6','#EF4444','#06B6D4','#84CC16','#14B8A6','#F97316','#A855F7','#0EA5E9','#22C55E','#E11D48','#7C3AED','#D946EF','#FB923C','#2DD4BF','#4ADE80','#9CA3AF'];
+
+        // ─── State Bar Chart (Top 20) ───
+        if (BLS_BY_STATE.length > 0) {{
+            const topStates = BLS_BY_STATE.slice(0, 20);
+            const ctx1 = document.getElementById('chart-jobs-state-bar').getContext('2d');
+            new Chart(ctx1, {{
+                type: 'bar',
+                data: {{
+                    labels: topStates.map(d => d.state),
+                    datasets: [{{
+                        label: 'Employment',
+                        data: topStates.map(d => d.employment),
+                        backgroundColor: '#3B82F6CC',
+                        borderColor: '#3B82F6',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                    }}]
+                }},
+                options: {{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {{
+                        legend: {{ display: false }},
+                        tooltip: {{
+                            callbacks: {{
+                                label: ctx => ctx.parsed.x.toLocaleString() + ' employed'
+                            }}
+                        }}
+                    }},
+                    scales: {{
+                        x: {{ beginAtZero: true, title: {{ display: true, text: 'Employment Count', font: {{ size: 11 }} }}, grid: {{ color: '#f3f4f6' }},
+                            ticks: {{ callback: v => v >= 1000 ? (v/1000).toFixed(0) + 'K' : v }} }},
+                        y: {{ ticks: {{ font: {{ size: 11 }} }}, grid: {{ display: false }} }}
+                    }}
+                }}
+            }});
+
+            // State doughnut (top 8 + other)
+            const top8s = BLS_BY_STATE.slice(0, 8);
+            const otherEmp = BLS_BY_STATE.slice(8).reduce((s,d) => s + d.employment, 0);
+            const sLabels = top8s.map(d => d.state);
+            const sData = top8s.map(d => d.employment);
+            if (otherEmp > 0) {{ sLabels.push('Other States'); sData.push(otherEmp); }}
+
+            const ctx2 = document.getElementById('chart-jobs-state-doughnut').getContext('2d');
+            new Chart(ctx2, {{
+                type: 'doughnut',
+                data: {{
+                    labels: sLabels,
+                    datasets: [{{ data: sData, backgroundColor: palette.slice(0, sLabels.length).map(c => c + 'CC'), borderColor: '#fff', borderWidth: 2 }}]
+                }},
+                options: {{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '40%',
+                    plugins: {{
+                        legend: {{ position: 'bottom', labels: {{ usePointStyle: true, padding: 10, font: {{ size: 10 }} }} }},
+                        tooltip: {{
+                            callbacks: {{
+                                label: ctx => {{
+                                    const pct = totalNational > 0 ? ((ctx.parsed / totalNational) * 100).toFixed(1) : '0';
+                                    return ctx.label + ': ' + ctx.parsed.toLocaleString() + ' (' + pct + '%)';
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }});
+        }}
+
+        // ─── Industry Bar Chart (Top 15) ───
+        if (BLS_BY_INDUSTRY.length > 0) {{
+            const topInd = BLS_BY_INDUSTRY.slice(0, 15);
+            const ctx3 = document.getElementById('chart-jobs-industry-bar').getContext('2d');
+            new Chart(ctx3, {{
+                type: 'bar',
+                data: {{
+                    labels: topInd.map(d => d.industry.length > 40 ? d.industry.substring(0,40) + '...' : d.industry),
+                    datasets: [{{
+                        label: 'Employment',
+                        data: topInd.map(d => d.employment),
+                        backgroundColor: '#8B5CF6CC',
+                        borderColor: '#8B5CF6',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                    }}]
+                }},
+                options: {{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {{
+                        legend: {{ display: false }},
+                        tooltip: {{
+                            callbacks: {{
+                                title: ctx => {{ const i = ctx[0].dataIndex; return topInd[i].industry; }},
+                                label: ctx => ctx.parsed.x.toLocaleString() + ' employed'
+                            }}
+                        }}
+                    }},
+                    scales: {{
+                        x: {{ beginAtZero: true, title: {{ display: true, text: 'Employment Count', font: {{ size: 11 }} }}, grid: {{ color: '#f3f4f6' }},
+                            ticks: {{ callback: v => v >= 1000 ? (v/1000).toFixed(0) + 'K' : v }} }},
+                        y: {{ ticks: {{ font: {{ size: 11 }} }}, grid: {{ display: false }} }}
+                    }}
+                }}
+            }});
+
+            // Industry doughnut (top 8 + other)
+            const top8i = BLS_BY_INDUSTRY.slice(0, 8);
+            const otherInd = BLS_BY_INDUSTRY.slice(8).reduce((s,d) => s + d.employment, 0);
+            const iLabels = top8i.map(d => d.industry.length > 30 ? d.industry.substring(0,30) + '...' : d.industry);
+            const iData = top8i.map(d => d.employment);
+            if (otherInd > 0) {{ iLabels.push('Other Industries'); iData.push(otherInd); }}
+
+            const indTotal = BLS_BY_INDUSTRY.reduce((s,d) => s + d.employment, 0);
+            const ctx4 = document.getElementById('chart-jobs-industry-doughnut').getContext('2d');
+            new Chart(ctx4, {{
+                type: 'doughnut',
+                data: {{
+                    labels: iLabels,
+                    datasets: [{{ data: iData, backgroundColor: palette.slice(0, iLabels.length).map(c => c + 'CC'), borderColor: '#fff', borderWidth: 2 }}]
+                }},
+                options: {{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '40%',
+                    plugins: {{
+                        legend: {{ position: 'bottom', labels: {{ usePointStyle: true, padding: 10, font: {{ size: 10 }} }} }},
+                        tooltip: {{
+                            callbacks: {{
+                                label: ctx => {{
+                                    const pct = indTotal > 0 ? ((ctx.parsed / indTotal) * 100).toFixed(1) : '0';
+                                    return ctx.label + ': ' + ctx.parsed.toLocaleString() + ' (' + pct + '%)';
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }});
+        }}
+
+        // ─── State Table ───
+        if (BLS_BY_STATE.length > 0) {{
+            let html = '<table><thead><tr>';
+            html += '<th style="width:40px">#</th>';
+            html += '<th>State</th>';
+            html += '<th style="width:160px">Employment</th>';
+            html += '<th style="width:130px">% of National</th>';
+            html += '</tr></thead><tbody>';
+
+            BLS_BY_STATE.forEach((d, i) => {{
+                const pct = totalNational > 0 ? ((d.employment / totalNational) * 100).toFixed(1) : '0';
+                const barW = totalNational > 0 ? ((d.employment / BLS_BY_STATE[0].employment) * 100).toFixed(0) : 0;
+                html += '<tr>';
+                html += '<td style="color:var(--text-secondary);font-size:12px;">' + (i+1) + '</td>';
+                html += '<td><strong>' + d.state + '</strong></td>';
+                html += '<td style="text-align:right; font-weight:600;">' + d.employment.toLocaleString() + '</td>';
+                html += '<td><div class="score-row"><div class="score-bar" style="flex:1"><div class="score-fill" style="width:' + barW + '%;background:#3B82F6"></div></div><span>' + pct + '%</span></div></td>';
+                html += '</tr>';
+            }});
+            html += '</tbody></table>';
+            document.getElementById('jobs-state-table').innerHTML = html;
+        }}
+
+        // ─── Industry Table ───
+        if (BLS_BY_INDUSTRY.length > 0) {{
+            let html2 = '<table><thead><tr>';
+            html2 += '<th style="width:40px">#</th>';
+            html2 += '<th>Industry</th>';
+            html2 += '<th style="width:160px">Employment</th>';
+            html2 += '<th style="width:130px">% of Total</th>';
+            html2 += '</tr></thead><tbody>';
+
+            const indSum = BLS_BY_INDUSTRY.reduce((s,d) => s + d.employment, 0);
+            BLS_BY_INDUSTRY.forEach((d, i) => {{
+                const pct = indSum > 0 ? ((d.employment / indSum) * 100).toFixed(1) : '0';
+                const barW = indSum > 0 ? ((d.employment / BLS_BY_INDUSTRY[0].employment) * 100).toFixed(0) : 0;
+                html2 += '<tr>';
+                html2 += '<td style="color:var(--text-secondary);font-size:12px;">' + (i+1) + '</td>';
+                html2 += '<td><strong>' + d.industry + '</strong></td>';
+                html2 += '<td style="text-align:right; font-weight:600;">' + d.employment.toLocaleString() + '</td>';
+                html2 += '<td><div class="score-row"><div class="score-bar" style="flex:1"><div class="score-fill" style="width:' + barW + '%;background:#8B5CF6"></div></div><span>' + pct + '%</span></div></td>';
+                html2 += '</tr>';
+            }});
+            html2 += '</tbody></table>';
+            document.getElementById('jobs-industry-table').innerHTML = html2;
+        }}
+    }})();
 
     // ── Tab Switching ──────────────────────────────────────────────────
     function switchTab(name, btn) {{
@@ -1610,6 +2530,33 @@ def main():
     abilities = get_occupation_elements(code, "abilities", api_key)
     print(f"  ✓ Abilities ({len(abilities)})")
 
+    # New: Education, Job Zone, Technologies
+    education = get_education_requirements(code, api_key)
+    print(f"  ✓ Education ({len(education)} levels)")
+
+    job_zone = get_job_zone(code, api_key)
+    print(f"  ✓ Job Zone: {job_zone.get('title', 'N/A')}")
+
+    technologies = get_hot_technologies(code, api_key)
+    print(f"  ✓ Technologies ({len(technologies)})")
+
+    # New: Industry data (this scans all industries — may take a moment)
+    print("  ⏳ Scanning industries...")
+    industries = get_occupation_industries(code, api_key)
+    print(f"  ✓ Industries ({len(industries)} found)")
+
+    # BLS Employment Data
+    bls_key = os.environ.get("BLS_API_KEY", "")
+    print("  ⏳ Fetching BLS employment data...")
+    bls_national = get_bls_national_employment(code, bls_key)
+    print(f"  ✓ National employment: {bls_national:,}")
+
+    bls_by_state = get_bls_employment_by_state(code, bls_key)
+    print(f"  ✓ State employment ({len(bls_by_state)} states)")
+
+    bls_by_industry = get_bls_employment_by_industry(code, bls_key)
+    print(f"  ✓ Industry employment ({len(bls_by_industry)} industries)")
+
     # AI Impact Analysis
     print("  ⚡ Analyzing AI impact...")
     ai_impact = analyze_ai_impact(summary, tasks, skills, knowledge, abilities)
@@ -1620,7 +2567,13 @@ def main():
     print(f"    Recommended agents: {len(ai_impact['agents'])}")
 
     # Generate dashboard
-    dashboard_html = generate_dashboard(summary, tasks, skills, knowledge, abilities, ai_impact)
+    dashboard_html = generate_dashboard(
+        summary, tasks, skills, knowledge, abilities, ai_impact,
+        industries=industries, education=education,
+        job_zone=job_zone, technologies=technologies,
+        bls_by_state=bls_by_state, bls_by_industry=bls_by_industry,
+        bls_national=bls_national
+    )
 
     # Write output
     safe_code = code.replace(".", "_").replace("-", "_")

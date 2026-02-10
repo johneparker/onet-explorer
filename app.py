@@ -17,6 +17,13 @@ from onet_explorer import (
     get_occupation_summary,
     get_occupation_tasks,
     get_occupation_elements,
+    get_education_requirements,
+    get_job_zone,
+    get_hot_technologies,
+    get_occupation_industries,
+    get_bls_employment_by_state,
+    get_bls_employment_by_industry,
+    get_bls_national_employment,
     analyze_ai_impact,
     generate_dashboard,
 )
@@ -24,6 +31,7 @@ from onet_explorer import (
 app = Flask(__name__)
 
 API_KEY = os.environ.get("ONET_API_KEY", "")
+BLS_KEY = os.environ.get("BLS_API_KEY", "")
 
 # ─── Landing / Search Page ────────────────────────────────────────────────────
 
@@ -222,8 +230,21 @@ def dashboard():
         skills = get_occupation_elements(code, "skills", API_KEY)
         knowledge = get_occupation_elements(code, "knowledge", API_KEY)
         abilities = get_occupation_elements(code, "abilities", API_KEY)
+        education = get_education_requirements(code, API_KEY)
+        job_zone = get_job_zone(code, API_KEY)
+        technologies = get_hot_technologies(code, API_KEY)
+        industries = get_occupation_industries(code, API_KEY)
+        bls_national = get_bls_national_employment(code, BLS_KEY)
+        bls_by_state = get_bls_employment_by_state(code, BLS_KEY)
+        bls_by_industry = get_bls_employment_by_industry(code, BLS_KEY)
         ai_impact = analyze_ai_impact(summary, tasks, skills, knowledge, abilities)
-        dashboard_html = generate_dashboard(summary, tasks, skills, knowledge, abilities, ai_impact)
+        dashboard_html = generate_dashboard(
+            summary, tasks, skills, knowledge, abilities, ai_impact,
+            industries=industries, education=education,
+            job_zone=job_zone, technologies=technologies,
+            bls_by_state=bls_by_state, bls_by_industry=bls_by_industry,
+            bls_national=bls_national
+        )
     except SystemExit:
         return render_template_string(
             LANDING_HTML, results=None, keyword="",

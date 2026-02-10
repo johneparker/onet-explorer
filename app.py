@@ -5,8 +5,7 @@ Flask web service that wraps the O*NET Explorer CLI tool,
 allowing users to search occupations and view interactive
 dashboards in the browser.
 
-Deploy to Render with ONET_USERNAME and ONET_PASSWORD
-set as environment variables.
+Deploy to Render with ONET_API_KEY set as an environment variable.
 """
 
 import os
@@ -24,8 +23,7 @@ from onet_explorer import (
 
 app = Flask(__name__)
 
-USERNAME = os.environ.get("ONET_USERNAME", "")
-PASSWORD = os.environ.get("ONET_PASSWORD", "")
+API_KEY = os.environ.get("ONET_API_KEY", "")
 
 # ─── Landing / Search Page ────────────────────────────────────────────────────
 
@@ -176,14 +174,14 @@ def index():
     if not keyword:
         return render_template_string(LANDING_HTML, results=None, keyword="", error=None)
 
-    if not USERNAME or not PASSWORD:
+    if not API_KEY:
         return render_template_string(
             LANDING_HTML, results=None, keyword=keyword,
-            error="Server misconfigured: O*NET API credentials not set. Contact the administrator."
+            error="Server misconfigured: O*NET API key not set. Contact the administrator."
         )
 
     try:
-        results = search_occupations(keyword, USERNAME, PASSWORD)
+        results = search_occupations(keyword, API_KEY)
     except SystemExit:
         return render_template_string(
             LANDING_HTML, results=None, keyword=keyword,
@@ -212,18 +210,18 @@ def dashboard():
         return render_template_string(LANDING_HTML, results=None, keyword="",
                                       error="No occupation code provided.")
 
-    if not USERNAME or not PASSWORD:
+    if not API_KEY:
         return render_template_string(
             LANDING_HTML, results=None, keyword="",
-            error="Server misconfigured: O*NET API credentials not set."
+            error="Server misconfigured: O*NET API key not set."
         )
 
     try:
-        summary = get_occupation_summary(code, USERNAME, PASSWORD)
-        tasks = get_occupation_tasks(code, USERNAME, PASSWORD)
-        skills = get_occupation_elements(code, "skills", USERNAME, PASSWORD)
-        knowledge = get_occupation_elements(code, "knowledge", USERNAME, PASSWORD)
-        abilities = get_occupation_elements(code, "abilities", USERNAME, PASSWORD)
+        summary = get_occupation_summary(code, API_KEY)
+        tasks = get_occupation_tasks(code, API_KEY)
+        skills = get_occupation_elements(code, "skills", API_KEY)
+        knowledge = get_occupation_elements(code, "knowledge", API_KEY)
+        abilities = get_occupation_elements(code, "abilities", API_KEY)
         ai_impact = analyze_ai_impact(summary, tasks, skills, knowledge, abilities)
         dashboard_html = generate_dashboard(summary, tasks, skills, knowledge, abilities, ai_impact)
     except SystemExit:
@@ -243,7 +241,7 @@ def dashboard():
 @app.route("/health")
 def health():
     """Health check endpoint for Render."""
-    return {"status": "ok", "credentials_configured": bool(USERNAME and PASSWORD)}
+    return {"status": "ok", "api_key_configured": bool(API_KEY)}
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────

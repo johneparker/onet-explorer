@@ -8,13 +8,12 @@ and an AI Impact analysis with automation potential and agent recommendations.
 
 Usage:
     python onet_explorer.py "software developer"
-    python onet_explorer.py "registered nurse" --username YOUR_USER --password YOUR_PASS
+    python onet_explorer.py "registered nurse" --api-key YOUR_API_KEY
 
-Credentials can also be set via environment variables:
-    export ONET_USERNAME=your_username
-    export ONET_PASSWORD=your_password
+API key can also be set via environment variable:
+    export ONET_API_KEY=your_api_key
 
-Register for free API credentials at: https://services.onetcenter.org/
+Register and generate an API key at: https://services.onetcenter.org/
 """
 
 import argparse
@@ -28,24 +27,24 @@ from datetime import datetime
 from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
-import base64
 
 
 # ─── API Client ───────────────────────────────────────────────────────────────
 
-BASE_URL = "https://services.onetcenter.org/ws"
+BASE_URL = "https://api-v2.onetcenter.org/"
 
 
-def make_request(endpoint: str, username: str, password: str, params: dict = None) -> dict:
+def make_request(endpoint: str, api_key: str, params: dict = None) -> dict:
     """Make an authenticated request to the O*NET API and return JSON."""
+    # Strip leading slash — v2 base URL already has trailing slash
+    endpoint = endpoint.lstrip("/")
     url = f"{BASE_URL}{endpoint}"
     if params:
         query = "&".join(f"{k}={quote(str(v))}" for k, v in params.items())
         url = f"{url}?{query}"
 
-    credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
     req = Request(url)
-    req.add_header("Authorization", f"Basic {credentials}")
+    req.add_header("X-API-Key", api_key)
     req.add_header("Accept", "application/json")
 
     try:
@@ -53,25 +52,25 @@ def make_request(endpoint: str, username: str, password: str, params: dict = Non
             return json.loads(resp.read().decode())
     except HTTPError as e:
         if e.code == 401:
-            raise RuntimeError("Authentication failed. Check your O*NET API credentials.")
+            raise RuntimeError("Authentication failed. Check your O*NET API key.")
         elif e.code == 422:
             raise RuntimeError(f"Invalid request — {e.read().decode()}")
         else:
             raise RuntimeError(f"HTTP {e.code} — {e.reason}")
 
 
-def search_occupations(keyword: str, username: str, password: str) -> list:
+def search_occupations(keyword: str, api_key: str) -> list:
     """Search for occupations by keyword. Returns list of {code, title}."""
-    data = make_request("/online/search", username, password, {"keyword": keyword})
+    data = make_request("/online/search", api_key, {"keyword": keyword})
     occupations = data.get("occupation", [])
     return [{"code": occ["code"], "title": occ["title"]} for occ in occupations]
 
 
-def get_occupation_tasks(code: str, username: str, password: str) -> list:
+def get_occupation_tasks(code: str, api_key: str) -> list:
     """Fetch all tasks for an occupation."""
     data = make_request(
         f"/online/occupations/{quote(code, safe='')}/details/tasks",
-        username, password, {"display": "long"}
+        api_key, {"display": "long"}
     )
     tasks = []
     for t in data.get("task", []):
@@ -84,11 +83,11 @@ def get_occupation_tasks(code: str, username: str, password: str) -> list:
     return sorted(tasks, key=lambda x: x["score"], reverse=True)
 
 
-def get_occupation_elements(code: str, element_type: str, username: str, password: str) -> list:
+def get_occupation_elements(code: str, element_type: str, api_key: str) -> list:
     """Fetch skills, knowledge, or abilities for an occupation."""
     data = make_request(
         f"/online/occupations/{quote(code, safe='')}/details/{element_type}",
-        username, password, {"display": "long"}
+        api_key, {"display": "long"}
     )
     elements = []
     for el in data.get("element", []):
@@ -101,11 +100,11 @@ def get_occupation_elements(code: str, element_type: str, username: str, passwor
     return sorted(elements, key=lambda x: x["score"], reverse=True)
 
 
-def get_occupation_summary(code: str, username: str, password: str) -> dict:
+def get_occupation_summary(code: str, api_key: str) -> dict:
     """Fetch the occupation summary/description."""
     data = make_request(
         f"/online/occupations/{quote(code, safe='')}",
-        username, password
+        api_key
     )
     return {
         "title": data.get("title", ""),
@@ -1508,36 +1507,32 @@ def main():
               python onet_explorer.py "registered nurse" --output nurse_dashboard.html
 
             Environment variables:
-              ONET_USERNAME   Your O*NET Web Services username
-              ONET_PASSWORD   Your O*NET Web Services password
+              ONET_API_KEY   Your O*NET Web Services API key
 
-            Register at: https://services.onetcenter.org/
+            Register and generate a key at: https://services.onetcenter.org/
         """)
     )
     parser.add_argument("keyword", help="Occupation keyword to search (e.g. 'data scientist')")
-    parser.add_argument("--username", default=os.environ.get("ONET_USERNAME", ""),
-                        help="O*NET API username (or set ONET_USERNAME env var)")
-    parser.add_argument("--password", default=os.environ.get("ONET_PASSWORD", ""),
-                        help="O*NET API password (or set ONET_PASSWORD env var)")
+    parser.add_argument("--api-key", default=os.environ.get("ONET_API_KEY", ""),
+                        help="O*NET API key (or set ONET_API_KEY env var)")
     parser.add_argument("--output", "-o", default="",
                         help="Output HTML filename (default: onet_<occupation_code>.html)")
     args = parser.parse_args()
 
     # Validate credentials
-    username = args.username
-    password = args.password
-    if not username or not password:
+    api_key = args.api_key
+    if not api_key:
         print("─" * 60)
-        print("O*NET API credentials required.")
-        print("Set ONET_USERNAME / ONET_PASSWORD environment variables,")
-        print("or pass --username and --password arguments.")
-        print("Register free at: https://services.onetcenter.org/")
+        print("O*NET API key required.")
+        print("Set ONET_API_KEY environment variable,")
+        print("or pass --api-key argument.")
+        print("Register and generate a key at: https://services.onetcenter.org/")
         print("─" * 60)
         sys.exit(1)
 
     # Search
     print(f"\nSearching O*NET for: \"{args.keyword}\"...")
-    results = search_occupations(args.keyword, username, password)
+    results = search_occupations(args.keyword, api_key)
     if not results:
         print("No occupations found. Try a different keyword.")
         sys.exit(0)
@@ -1567,19 +1562,19 @@ def main():
     print(f"\nFetching data for: {selected['title']} ({code})...")
 
     # Fetch all data
-    summary = get_occupation_summary(code, username, password)
+    summary = get_occupation_summary(code, api_key)
     print("  ✓ Summary")
 
-    tasks = get_occupation_tasks(code, username, password)
+    tasks = get_occupation_tasks(code, api_key)
     print(f"  ✓ Tasks ({len(tasks)})")
 
-    skills = get_occupation_elements(code, "skills", username, password)
+    skills = get_occupation_elements(code, "skills", api_key)
     print(f"  ✓ Skills ({len(skills)})")
 
-    knowledge = get_occupation_elements(code, "knowledge", username, password)
+    knowledge = get_occupation_elements(code, "knowledge", api_key)
     print(f"  ✓ Knowledge ({len(knowledge)})")
 
-    abilities = get_occupation_elements(code, "abilities", username, password)
+    abilities = get_occupation_elements(code, "abilities", api_key)
     print(f"  ✓ Abilities ({len(abilities)})")
 
     # AI Impact Analysis

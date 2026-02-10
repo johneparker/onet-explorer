@@ -14,12 +14,12 @@ An interactive HTML dashboard that pulls occupation data from the [O\*NET Web Se
   - **Knowledge** — knowledge domain analysis
   - **Abilities** — ability requirements breakdown
 - **AI Impact Analysis Engine** — classifies every task as *automate*, *augment*, or *human-essential* using keyword pattern matching, then recommends relevant AI agents and skills
-- **Zero Dependencies** — uses only Python standard library (`urllib`, `json`, `base64`, `argparse`, `re`, `html`)
+- **Zero Dependencies** — uses only Python standard library (`urllib`, `json`, `argparse`, `re`, `html`)
 
 ## Prerequisites
 
 1. **Python 3.7+**
-2. **O\*NET Web Services account** — register free at [services.onetcenter.org](https://services.onetcenter.org/)
+2. **O\*NET Web Services API key** — register free at [services.onetcenter.org](https://services.onetcenter.org/) and generate a key from My Account
 
 ## Quick Start
 
@@ -28,12 +28,11 @@ An interactive HTML dashboard that pulls occupation data from the [O\*NET Web Se
 git clone https://github.com/johneparker/onet-explorer.git
 cd onet-explorer
 
-# Run with credentials as arguments
-python onet_explorer.py "software developer" --username YOUR_USERNAME --password YOUR_PASSWORD
+# Run with API key as argument
+python onet_explorer.py "software developer" --api-key YOUR_API_KEY
 
-# Or set environment variables
-export ONET_USERNAME=your_username
-export ONET_PASSWORD=your_password
+# Or set environment variable
+export ONET_API_KEY=your_api_key
 python onet_explorer.py "registered nurse"
 ```
 
@@ -49,15 +48,13 @@ Open the generated HTML file in any browser — no server required.
 ## Usage
 
 ```
-python onet_explorer.py [-h] [--username USERNAME] [--password PASSWORD]
-                        [--output OUTPUT] keyword
+python onet_explorer.py [-h] [--api-key API_KEY] [--output OUTPUT] keyword
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `keyword` | Occupation keyword to search (e.g., `"data scientist"`) |
-| `--username` | O\*NET API username (or set `ONET_USERNAME` env var) |
-| `--password` | O\*NET API password (or set `ONET_PASSWORD` env var) |
+| `--api-key` | O\*NET API key (or set `ONET_API_KEY` env var) |
 | `--output`, `-o` | Output HTML filename (default: `onet_<code>.html`) |
 
 ### Examples
@@ -65,7 +62,7 @@ python onet_explorer.py [-h] [--username USERNAME] [--password PASSWORD]
 ```bash
 python onet_explorer.py "financial analyst"
 python onet_explorer.py "registered nurse" -o nurse_dashboard.html
-python onet_explorer.py "project manager" --username myuser --password mypass
+python onet_explorer.py "project manager" --api-key 0rQoQ-xxxxx-xxxxx-xxxxx
 ```
 
 ## AI Impact Analysis
@@ -89,17 +86,15 @@ A Flask web interface is also included, letting users search and view dashboards
 1. Fork or push this repo to your GitHub account
 2. Go to [render.com](https://render.com) → **New** → **Blueprint**
 3. Connect this repository — Render will auto-detect `render.yaml`
-4. Set the environment variables when prompted:
-   - `ONET_USERNAME` — your O\*NET API username
-   - `ONET_PASSWORD` — your O\*NET API password
+4. Set the environment variable when prompted:
+   - `ONET_API_KEY` — your O\*NET Web Services API key
 5. Deploy — your app will be live at `https://onet-explorer.onrender.com`
 
 ### Run Locally
 
 ```bash
 pip install -r requirements.txt
-export ONET_USERNAME=your_username
-export ONET_PASSWORD=your_password
+export ONET_API_KEY=your_api_key
 python app.py
 ```
 
@@ -107,7 +102,7 @@ Then visit `http://localhost:5000` in your browser.
 
 ## How It Works
 
-1. **API Client** — makes authenticated requests to O\*NET Web Services REST API
+1. **API Client** — makes authenticated requests to the O\*NET Web Services v2 REST API using `X-API-Key` header
 2. **Data Retrieval** — fetches occupation summary, tasks, skills, knowledge, and abilities
 3. **AI Analysis** — classifies tasks, scores overall impact, recommends agents and skills
 4. **Dashboard Generation** — produces a single HTML file with embedded CSS, JavaScript, Chart.js charts, and JSON data

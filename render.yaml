@@ -7,9 +7,7 @@ services:
     startCommand: gunicorn app:app
     healthCheckPath: /health
     envVars:
-      - key: ONET_USERNAME
-        sync: false
-      - key: ONET_PASSWORD
+      - key: ONET_API_KEY
         sync: false
       - key: PYTHON_VERSION
         value: "3.11.11"

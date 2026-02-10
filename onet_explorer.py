@@ -1260,6 +1260,119 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
             margin-bottom: var(--gap);
         }}
         .trend-card h3 {{ font-size: 15px; font-weight: 600; margin-bottom: 8px; }}
+
+        /* Narrative sections */
+        .narrative-section {{
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 24px 28px;
+            margin-bottom: var(--gap);
+            border: 1px solid #e5e7eb;
+        }}
+        .narrative-section h3 {{
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+        .narrative-section h3 .n-icon {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            font-size: 14px;
+        }}
+        .narrative-section p {{
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.9;
+            margin-bottom: 12px;
+        }}
+        .narrative-section p:last-child {{ margin-bottom: 0; }}
+        .narrative-section strong {{ color: var(--text-primary); }}
+        .narrative-section .highlight {{
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 13px;
+        }}
+        .highlight-blue {{ background: #EFF6FF; color: #1D4ED8; }}
+        .highlight-green {{ background: #ECFDF5; color: #065F46; }}
+        .highlight-amber {{ background: #FFFBEB; color: #92400E; }}
+        .highlight-purple {{ background: #F5F3FF; color: #5B21B6; }}
+        .highlight-rose {{ background: #FFF1F2; color: #9F1239; }}
+        .insight-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+            margin-top: 16px;
+        }}
+        .insight-item {{
+            background: var(--bg-primary);
+            border-radius: 8px;
+            padding: 16px;
+            border: 1px solid #f3f4f6;
+        }}
+        .insight-item .i-label {{
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }}
+        .insight-item .i-value {{
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }}
+        .insight-item .i-note {{
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+            line-height: 1.5;
+        }}
+        .skills-narrative-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            margin-top: 14px;
+        }}
+        @media (max-width: 700px) {{ .skills-narrative-grid {{ grid-template-columns: 1fr; }} }}
+        .skill-group {{
+            background: var(--bg-primary);
+            border-radius: 8px;
+            padding: 16px;
+            border: 1px solid #f3f4f6;
+        }}
+        .skill-group h4 {{
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        .skill-group ul {{
+            list-style: none;
+            padding: 0;
+        }}
+        .skill-group ul li {{
+            font-size: 13px;
+            color: var(--text-secondary);
+            padding: 3px 0;
+            display: flex;
+            justify-content: space-between;
+        }}
+        .skill-group ul li span.score {{
+            font-weight: 600;
+            color: var(--text-primary);
+        }}
         .trend-kpis {{ display: flex; gap: 32px; flex-wrap: wrap; margin-bottom: 16px; }}
         .trend-kpi {{ text-align: center; }}
         .trend-kpi .val {{ font-size: 28px; font-weight: 800; color: var(--accent); }}
@@ -1379,6 +1492,12 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
                 <div class="sample-titles" id="analysis-sample-titles"></div>
             </div>
 
+            <!-- Workforce Overview Narrative -->
+            <div class="narrative-section" id="narrative-overview">
+                <h3><span class="n-icon" style="background:#EFF6FF;color:#3B82F6;">&#9432;</span> Workforce Overview</h3>
+                <div id="narrative-overview-content"></div>
+            </div>
+
             <!-- Key Facts -->
             <div class="info-grid" id="analysis-info-grid">
                 <div class="info-card" id="card-education">
@@ -1395,10 +1514,22 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
                 </div>
             </div>
 
+            <!-- Skills & Competencies Narrative -->
+            <div class="narrative-section" id="narrative-skills">
+                <h3><span class="n-icon" style="background:#ECFDF5;color:#10B981;">&#9881;</span> Skills &amp; Competencies Profile</h3>
+                <div id="narrative-skills-content"></div>
+            </div>
+
             <!-- Technologies -->
             <div class="table-card">
                 <h3>In-Demand Technologies &amp; Tools</h3>
                 <div class="tech-list" id="tech-list"></div>
+            </div>
+
+            <!-- Industry Landscape Narrative -->
+            <div class="narrative-section" id="narrative-industries">
+                <h3><span class="n-icon" style="background:#F5F3FF;color:#8B5CF6;">&#9878;</span> Industry Landscape</h3>
+                <div id="narrative-industries-content"></div>
             </div>
 
             <!-- Industries -->
@@ -1412,6 +1543,12 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
                     <div class="trend-kpis" id="trend-kpis"></div>
                     <canvas id="chart-analysis-trends"></canvas>
                 </div>
+            </div>
+
+            <!-- Career Pathway & Business Value Narrative -->
+            <div class="narrative-section" id="narrative-career">
+                <h3><span class="n-icon" style="background:#FFFBEB;color:#D97706;">&#9734;</span> Career Pathway &amp; Business Value</h3>
+                <div id="narrative-career-content"></div>
             </div>
 
             <!-- AI Impact Summary for Analysis tab -->
@@ -1436,6 +1573,12 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
                         <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase;">Human-Essential</div>
                     </div>
                 </div>
+            </div>
+
+            <!-- AI Strategy Narrative -->
+            <div class="narrative-section" id="narrative-ai-strategy">
+                <h3><span class="n-icon" style="background:#FFF1F2;color:#E11D48;">&#9881;</span> AI Strategy &amp; Workforce Implications</h3>
+                <div id="narrative-ai-strategy-content"></div>
             </div>
         </div>
 
@@ -1815,7 +1958,272 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
         document.getElementById('analysis-ai-auto').textContent = AI_IMPACT.distribution.automate;
         document.getElementById('analysis-ai-augment').textContent = AI_IMPACT.distribution.augment;
         document.getElementById('analysis-ai-human').textContent = AI_IMPACT.distribution.human;
-    }})();
+
+        // ─── Narrative: Workforce Overview ────────────────────────────
+        (function() {{
+            const el = document.getElementById('narrative-overview-content');
+            const title = SUMMARY.title || 'This occupation';
+            const totalTasks = TASKS.length;
+            const highTasks = TASKS.filter(t => t.score >= 70).length;
+            const nat = BLS_NATIONAL || BLS_BY_STATE.reduce((s,d) => s + d.employment, 0);
+            const numStates = BLS_BY_STATE.length;
+            const numInd = BLS_BY_INDUSTRY.length || INDUSTRIES.length;
+            const topEdu = EDUCATION.filter(e => e.percentage_of_respondents > 0).sort((a,b) => b.percentage_of_respondents - a.percentage_of_respondents)[0];
+            const jzTitle = JOB_ZONE.title || '';
+
+            let html = '<p>';
+            html += '<strong>' + title + '</strong> professionals ';
+            if (nat > 0) {{
+                html += 'represent a workforce of approximately <span class="highlight highlight-blue">' + nat.toLocaleString() + ' workers nationally</span>';
+                if (numStates > 0) html += ', employed across <strong>' + numStates + ' states</strong>';
+                html += '. ';
+            }}
+            html += 'The role encompasses <strong>' + totalTasks + ' distinct tasks</strong>';
+            if (highTasks > 0) html += ', of which <strong>' + highTasks + '</strong> are rated as high-importance activities that define the core of daily work';
+            html += '.</p>';
+
+            html += '<p>';
+            if (topEdu) {{
+                html += 'The most common educational pathway is a <strong>' + topEdu.title + '</strong> (held by ' + topEdu.percentage_of_respondents + '% of workers). ';
+            }}
+            if (jzTitle) {{
+                html += 'O*NET classifies this as <span class="highlight highlight-purple">' + jzTitle + '</span>';
+                if (JOB_ZONE.experience) html += ', typically requiring ' + JOB_ZONE.experience.toLowerCase();
+                html += '. ';
+            }}
+            if (numInd > 0) {{
+                html += 'These professionals are hired across <strong>' + numInd + ' distinct industries</strong>, reflecting broad demand across the economy.';
+            }}
+            html += '</p>';
+
+            // Key metrics grid
+            html += '<div class="insight-grid">';
+            if (nat > 0) {{
+                html += '<div class="insight-item"><div class="i-label">National Workforce</div><div class="i-value">' + nat.toLocaleString() + '</div><div class="i-note">BLS OEWS estimate</div></div>';
+            }}
+            html += '<div class="insight-item"><div class="i-label">Core Tasks</div><div class="i-value">' + totalTasks + '</div><div class="i-note">' + highTasks + ' high-importance</div></div>';
+            html += '<div class="insight-item"><div class="i-label">Skills Required</div><div class="i-value">' + SKILLS.length + '</div><div class="i-note">' + SKILLS.filter(s => s.score >= 60).length + ' critical skills</div></div>';
+            html += '<div class="insight-item"><div class="i-label">Knowledge Areas</div><div class="i-value">' + KNOWLEDGE.length + '</div><div class="i-note">' + KNOWLEDGE.filter(k => k.score >= 60).length + ' essential domains</div></div>';
+            html += '</div>';
+
+            el.innerHTML = html;
+        }})();
+
+        // ─── Narrative: Skills & Competencies ─────────────────────────
+        (function() {{
+            const el = document.getElementById('narrative-skills-content');
+            const title = SUMMARY.title || 'This occupation';
+            const topSkills = SKILLS.slice(0, 5);
+            const topKnowledge = KNOWLEDGE.slice(0, 5);
+            const topAbilities = ABILITIES.slice(0, 5);
+            const criticalSkills = SKILLS.filter(s => s.score >= 70);
+            const foundationalKnowledge = KNOWLEDGE.filter(k => k.score >= 60);
+
+            let html = '<p>Success as a <strong>' + title + '</strong> demands a blend of technical expertise and professional competencies. ';
+            if (topSkills.length > 0) {{
+                html += 'The most critical skill is <strong>' + topSkills[0].name + '</strong> (importance: ' + topSkills[0].score + '/100)';
+                if (topSkills.length > 2) {{
+                    html += ', followed by <strong>' + topSkills[1].name + '</strong> and <strong>' + topSkills[2].name + '</strong>';
+                }}
+                html += '. ';
+            }}
+            if (criticalSkills.length > 0) {{
+                html += 'Overall, <span class="highlight highlight-green">' + criticalSkills.length + ' skills are rated as critical</span> (importance ≥ 70), signaling a role that requires well-rounded capabilities.</p>';
+            }} else {{
+                html += '</p>';
+            }}
+
+            html += '<p>';
+            if (foundationalKnowledge.length > 0) {{
+                html += 'From a knowledge perspective, <strong>' + foundationalKnowledge[0].name + '</strong>';
+                if (foundationalKnowledge.length > 1) html += ' and <strong>' + foundationalKnowledge[1].name + '</strong>';
+                html += ' form the intellectual foundation. ';
+            }}
+            if (topAbilities.length > 0) {{
+                html += 'Key cognitive abilities include <strong>' + topAbilities[0].name + '</strong>';
+                if (topAbilities.length > 1) html += ' and <strong>' + topAbilities[1].name + '</strong>';
+                html += ', which are essential for effective performance.';
+            }}
+            html += '</p>';
+
+            // Skill breakdown grid
+            html += '<div class="skills-narrative-grid">';
+            html += '<div class="skill-group"><h4>Top Skills</h4><ul>';
+            topSkills.forEach(s => {{ html += '<li>' + s.name + ' <span class="score">' + s.score + '</span></li>'; }});
+            html += '</ul></div>';
+            html += '<div class="skill-group"><h4>Top Knowledge</h4><ul>';
+            topKnowledge.forEach(k => {{ html += '<li>' + k.name + ' <span class="score">' + k.score + '</span></li>'; }});
+            html += '</ul></div>';
+            html += '<div class="skill-group"><h4>Top Abilities</h4><ul>';
+            topAbilities.forEach(a => {{ html += '<li>' + a.name + ' <span class="score">' + a.score + '</span></li>'; }});
+            html += '</ul></div>';
+            html += '<div class="skill-group"><h4>Key Technologies</h4><ul>';
+            TECHNOLOGIES.slice(0, 5).forEach(t => {{ html += '<li>' + t.title + ' <span class="score">' + (t.percentage > 0 ? t.percentage + '%' : '—') + '</span></li>'; }});
+            html += '</ul></div>';
+            html += '</div>';
+
+            el.innerHTML = html;
+        }})();
+
+        // ─── Narrative: Industry Landscape ────────────────────────────
+        (function() {{
+            const el = document.getElementById('narrative-industries-content');
+            const title = SUMMARY.title || 'This occupation';
+            const hasONET = INDUSTRIES.length > 0;
+            const hasBLS = BLS_BY_INDUSTRY.length > 0;
+
+            let html = '';
+            if (hasBLS) {{
+                const top3 = BLS_BY_INDUSTRY.slice(0, 3);
+                const totalBLS = BLS_BY_INDUSTRY.reduce((s,d) => s + d.employment, 0);
+                const top3pct = totalBLS > 0 ? ((top3.reduce((s,d) => s + d.employment, 0) / totalBLS) * 100).toFixed(0) : 0;
+                const concentration = top3pct > 70 ? 'highly concentrated' : top3pct > 50 ? 'moderately concentrated' : 'broadly distributed';
+
+                html += '<p>Bureau of Labor Statistics data shows <strong>' + title + '</strong> employment is ' + concentration + ' across industries. ';
+                html += 'The top three employing industries — ';
+                html += top3.map((d,i) => '<strong>' + d.industry + '</strong>' + (i < 2 && i < top3.length - 1 ? ', ' : '')).join('');
+                html += ' — account for <span class="highlight highlight-purple">' + top3pct + '% of all positions</span>. ';
+                html += 'In total, <strong>' + BLS_BY_INDUSTRY.length + ' industries</strong> employ workers in this occupation.</p>';
+
+                if (BLS_BY_INDUSTRY.length > 5) {{
+                    const emerging = BLS_BY_INDUSTRY.slice(3, 6);
+                    html += '<p>Beyond the primary industries, notable employment also exists in ';
+                    html += emerging.map(d => '<strong>' + d.industry + '</strong> (' + d.employment.toLocaleString() + ' workers)').join(', ');
+                    html += '. This breadth of industry demand provides career flexibility and resilience against sector-specific downturns.</p>';
+                }}
+            }} else if (hasONET) {{
+                const top3 = INDUSTRIES.slice(0, 3);
+                html += '<p>O*NET data identifies <strong>' + INDUSTRIES.length + ' industries</strong> that employ <strong>' + title + '</strong> professionals. ';
+                if (top3.length > 0) {{
+                    html += 'The largest concentration is in <strong>' + top3[0].industry + '</strong> (' + top3[0].percent_employed + '% of workers)';
+                    if (top3.length > 1) html += ', followed by <strong>' + top3[1].industry + '</strong> (' + top3[1].percent_employed + '%)';
+                    html += '.</p>';
+                }}
+            }} else {{
+                html += '<p>Industry distribution data is not currently available for this occupation.</p>';
+            }}
+
+            // State insight if available
+            if (BLS_BY_STATE.length > 0) {{
+                const topStates = BLS_BY_STATE.slice(0, 5);
+                const nat = BLS_NATIONAL || BLS_BY_STATE.reduce((s,d) => s + d.employment, 0);
+                const topPct = nat > 0 ? ((topStates.reduce((s,d) => s + d.employment, 0) / nat) * 100).toFixed(0) : 0;
+                html += '<p><strong>Geographic concentration:</strong> The top five states — ';
+                html += topStates.map(s => s.state).join(', ');
+                html += ' — employ <span class="highlight highlight-blue">' + topPct + '% of the national workforce</span>. ';
+                html += 'This suggests that organizations in these states face the most competitive hiring markets for this role.</p>';
+            }}
+
+            el.innerHTML = html;
+        }})();
+
+        // ─── Narrative: Career Pathway & Business Value ───────────────
+        (function() {{
+            const el = document.getElementById('narrative-career-content');
+            const title = SUMMARY.title || 'This occupation';
+            const nat = BLS_NATIONAL || BLS_BY_STATE.reduce((s,d) => s + d.employment, 0);
+            const hasGrowth = INDUSTRIES.length > 0 && INDUSTRIES[0].projected_growth;
+            const growth = hasGrowth ? INDUSTRIES[0].projected_growth : '';
+            const openings = INDUSTRIES.length > 0 ? (INDUSTRIES[0].projected_openings || 0) : 0;
+            const isBright = SUMMARY.is_bright_outlook;
+
+            let html = '<p>';
+            if (hasGrowth) {{
+                const growthLower = growth.toLowerCase();
+                if (growthLower.includes('faster') || growthLower.includes('much faster')) {{
+                    html += 'The outlook for <strong>' + title + '</strong> is notably positive, with projected growth rated as <span class="highlight highlight-green">' + growth + '</span> than the national average. ';
+                }} else if (growthLower.includes('average')) {{
+                    html += '<strong>' + title + '</strong> positions are expected to grow at an <span class="highlight highlight-amber">' + growth.toLowerCase() + '</span> pace. ';
+                }} else {{
+                    html += 'Growth for <strong>' + title + '</strong> roles is projected as <span class="highlight highlight-amber">' + growth.toLowerCase() + '</span>. ';
+                }}
+            }}
+            if (openings > 0) {{
+                html += 'An estimated <strong>' + openings.toLocaleString() + ' job openings</strong> are projected over the next five years from both growth and replacement needs. ';
+            }}
+            if (isBright) {{
+                html += 'O*NET designates this as a <span class="highlight highlight-green">Bright Outlook</span> occupation, indicating strong hiring prospects.';
+            }}
+            html += '</p>';
+
+            // Business value narrative
+            html += '<p><strong>Business impact:</strong> ';
+            if (SKILLS.length > 0 && KNOWLEDGE.length > 0) {{
+                const techSkills = SKILLS.filter(s => ['Programming','Computers and Electronics','Engineering and Technology','Mathematics','Systems Analysis','Technology Design','Complex Problem Solving'].some(k => s.name.includes(k) || s.name.toLowerCase().includes(k.toLowerCase())));
+                const interpSkills = SKILLS.filter(s => ['Critical Thinking','Active Listening','Judgment','Decision Making','Communication','Coordination','Social Perceptiveness'].some(k => s.name.includes(k) || s.name.toLowerCase().includes(k.toLowerCase())));
+
+                if (techSkills.length > 0 && interpSkills.length > 0) {{
+                    html += 'This role combines both technical depth and interpersonal capability, making it a high-value position for organizations. ';
+                    html += 'The blend of analytical skills (such as ' + techSkills.slice(0,2).map(s => s.name).join(' and ') + ') with professional competencies (including ' + interpSkills.slice(0,2).map(s => s.name).join(' and ') + ') ';
+                    html += 'means these professionals directly influence operational efficiency, innovation capacity, and strategic decision-making.';
+                }} else {{
+                    html += 'Professionals in this role bring specialized expertise that directly contributes to organizational performance and competitive advantage.';
+                }}
+            }} else {{
+                html += 'Professionals in this role bring specialized expertise that directly contributes to organizational performance.';
+            }}
+            html += '</p>';
+
+            // Talent strategy callout
+            if (nat > 100000) {{
+                html += '<p><strong>Talent strategy consideration:</strong> With over ' + (Math.floor(nat / 100000) * 100000).toLocaleString() + ' professionals in the national labor market, this is a sizable but competitive talent pool. Organizations should invest in employer branding, competitive compensation, and retention strategies to attract and keep top performers.</p>';
+            }} else if (nat > 10000) {{
+                html += '<p><strong>Talent strategy consideration:</strong> With approximately ' + nat.toLocaleString() + ' professionals nationally, this is a specialized talent pool. Targeted recruiting, partnerships with educational institutions, and internal development pipelines are key strategies for building capacity.</p>';
+            }}
+
+            el.innerHTML = html;
+        }})();
+
+        // ─── Narrative: AI Strategy & Workforce Implications ──────────
+        (function() {{
+            const el = document.getElementById('narrative-ai-strategy-content');
+            const title = SUMMARY.title || 'This occupation';
+            const autoCount = AI_IMPACT.distribution.automate || 0;
+            const augCount = AI_IMPACT.distribution.augment || 0;
+            const humanCount = AI_IMPACT.distribution.human || 0;
+            const totalTasks = autoCount + augCount + humanCount;
+            const score = AI_IMPACT.overall_score || 0;
+            const agents = AI_IMPACT.agents || [];
+
+            let html = '<p>';
+            if (score >= 70) {{
+                html += 'AI will significantly reshape the <strong>' + title + '</strong> role. With an impact score of <span class="highlight highlight-rose">' + score + '/100</span>, ';
+                html += 'organizations should proactively develop transition plans. ';
+            }} else if (score >= 40) {{
+                html += 'AI presents substantial augmentation opportunities for <strong>' + title + '</strong> professionals. With a moderate impact score of <span class="highlight highlight-amber">' + score + '/100</span>, ';
+                html += 'the focus should be on upskilling and tool adoption rather than role elimination. ';
+            }} else {{
+                html += 'AI impact on the <strong>' + title + '</strong> role is relatively limited, with a score of <span class="highlight highlight-green">' + score + '/100</span>. ';
+                html += 'The human-centric nature of this work provides strong resilience against automation. ';
+            }}
+            html += '</p>';
+
+            if (totalTasks > 0) {{
+                const autoPct = ((autoCount / totalTasks) * 100).toFixed(0);
+                const augPct = ((augCount / totalTasks) * 100).toFixed(0);
+                const humanPct = ((humanCount / totalTasks) * 100).toFixed(0);
+                html += '<p>Of the <strong>' + totalTasks + ' tasks</strong> in this role: ';
+                html += '<span class="highlight highlight-rose">' + autoPct + '% are automatable</span>, ';
+                html += '<span class="highlight highlight-amber">' + augPct + '% can be augmented</span> by AI tools, and ';
+                html += '<span class="highlight highlight-green">' + humanPct + '% remain human-essential</span>. ';
+                if (parseInt(augPct) > parseInt(autoPct)) {{
+                    html += 'The predominance of augmentable tasks suggests AI will primarily serve as a force multiplier, enabling professionals to handle greater volume and complexity rather than replacing them.';
+                }} else if (parseInt(autoPct) > 40) {{
+                    html += 'The high proportion of automatable tasks signals that role responsibilities will likely shift toward higher-value activities as routine work is automated.';
+                }}
+                html += '</p>';
+            }}
+
+            if (agents.length > 0) {{
+                html += '<p><strong>Recommended AI investments:</strong> ';
+                html += 'Based on task analysis, ' + agents.length + ' AI agent ' + (agents.length === 1 ? 'type is' : 'types are') + ' relevant for this role. ';
+                html += 'The highest-impact deployments include ';
+                html += agents.slice(0, 3).map(a => '<strong>' + a.name + '</strong>').join(', ');
+                html += '. These tools can deliver measurable productivity gains while allowing workers to focus on the judgment-intensive and relationship-driven aspects of their work.</p>';
+            }}
+
+            el.innerHTML = html;
+        }})();
 
     // ── Jobs Tab (BLS OEWS Data) ───────────────────────────────────────
     (function() {{

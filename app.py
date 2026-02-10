@@ -121,6 +121,38 @@ LANDING_HTML = """<!DOCTYPE html>
   @keyframes spin { to { transform: rotate(360deg); } }
   footer { text-align: center; margin-top: 40px; color: var(--text-secondary); font-size: 0.8rem; }
   footer a { color: var(--primary); text-decoration: none; }
+
+  /* Loading overlay */
+  .loading-overlay {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(15, 23, 42, 0.92); z-index: 9999;
+    flex-direction: column; align-items: center; justify-content: center;
+  }
+  .loading-overlay.active { display: flex; }
+  .loading-overlay .pulse-ring {
+    width: 80px; height: 80px; border-radius: 50%;
+    border: 4px solid transparent; border-top-color: var(--primary); border-right-color: var(--accent);
+    animation: spin 1s linear infinite;
+    margin-bottom: 28px;
+  }
+  .loading-overlay h2 {
+    font-size: 1.4rem; font-weight: 700; margin-bottom: 10px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .loading-overlay p { color: var(--text-secondary); font-size: 0.95rem; max-width: 400px; text-align: center; line-height: 1.6; }
+  .loading-steps { margin-top: 24px; text-align: left; width: 320px; }
+  .loading-step {
+    display: flex; align-items: center; gap: 10px; padding: 8px 0;
+    font-size: 0.85rem; color: var(--text-secondary); transition: color 0.3s;
+  }
+  .loading-step.active { color: var(--text); }
+  .loading-step.done { color: var(--accent); }
+  .step-icon { width: 20px; text-align: center; font-size: 0.9rem; }
+  .loading-step.active .step-icon::after { content: "⟳"; animation: spin 1s linear infinite; display: inline-block; }
+  .loading-step.pending .step-icon::after { content: "○"; }
+  .loading-step.done .step-icon::after { content: "✓"; }
+  .loading-elapsed { margin-top: 18px; font-size: 0.78rem; color: var(--text-secondary); opacity: 0.6; }
 </style>
 </head>
 <body>
@@ -169,6 +201,64 @@ LANDING_HTML = """<!DOCTYPE html>
     &middot; <a href="https://github.com/johneparker/onet-explorer" target="_blank">GitHub</a>
   </footer>
 </div>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loading-overlay">
+  <div class="pulse-ring"></div>
+  <h2>Building Your Dashboard</h2>
+  <p>Analyzing occupation data from O*NET and the Bureau of Labor Statistics. This typically takes 30–60 seconds.</p>
+  <div class="loading-steps">
+    <div class="loading-step active" id="step-onet"><span class="step-icon"></span> Fetching O*NET occupation data</div>
+    <div class="loading-step pending" id="step-skills"><span class="step-icon"></span> Analyzing skills, knowledge &amp; abilities</div>
+    <div class="loading-step pending" id="step-industries"><span class="step-icon"></span> Scanning industry employment</div>
+    <div class="loading-step pending" id="step-bls"><span class="step-icon"></span> Retrieving BLS state &amp; industry jobs</div>
+    <div class="loading-step pending" id="step-ai"><span class="step-icon"></span> Running AI impact analysis</div>
+    <div class="loading-step pending" id="step-dashboard"><span class="step-icon"></span> Generating interactive dashboard</div>
+  </div>
+  <div class="loading-elapsed" id="loading-elapsed">Elapsed: 0s</div>
+</div>
+
+<script>
+(function() {
+  const overlay = document.getElementById('loading-overlay');
+  if (!overlay) return;
+  const steps = ['step-onet','step-skills','step-industries','step-bls','step-ai','step-dashboard'];
+  const durations = [3, 5, 12, 20, 5, 3]; // approximate seconds per step
+  let elapsed = 0, timer, stepTimer;
+
+  function advanceSteps() {
+    let cumulative = 0;
+    for (let i = 0; i < steps.length; i++) {
+      const el = document.getElementById(steps[i]);
+      cumulative += durations[i];
+      if (elapsed >= cumulative) {
+        el.className = 'loading-step done';
+      } else if (elapsed >= cumulative - durations[i]) {
+        el.className = 'loading-step active';
+      } else {
+        el.className = 'loading-step pending';
+      }
+    }
+  }
+
+  function startLoading() {
+    overlay.classList.add('active');
+    elapsed = 0;
+    timer = setInterval(function() {
+      elapsed++;
+      document.getElementById('loading-elapsed').textContent = 'Elapsed: ' + elapsed + 's';
+      advanceSteps();
+    }, 1000);
+  }
+
+  // Intercept clicks on occupation links
+  document.querySelectorAll('.occ-link').forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      startLoading();
+    });
+  });
+})();
+</script>
 </body>
 </html>"""
 

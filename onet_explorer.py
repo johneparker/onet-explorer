@@ -59,43 +59,66 @@ def make_request(endpoint: str, api_key: str, params: dict = None) -> dict:
             raise RuntimeError(f"HTTP {e.code} — {e.reason}")
 
 
+def _fetch_all_pages(endpoint: str, api_key: str, list_key: str) -> list:
+    """Fetch all pages of a paginated O*NET v2 endpoint."""
+    from urllib.parse import urlparse
+    all_items = []
+    data = make_request(endpoint, api_key)
+    all_items.extend(data.get(list_key, []))
+
+    # Follow pagination links until exhausted
+    while data.get("next"):
+        next_url = data["next"]
+        parsed = urlparse(next_url)
+        path = parsed.path.lstrip("/")
+        qs = parsed.query
+        full_endpoint = f"{path}?{qs}" if qs else path
+        data = make_request(full_endpoint, api_key)
+        all_items.extend(data.get(list_key, []))
+
+    return all_items
+
+
 def search_occupations(keyword: str, api_key: str) -> list:
     """Search for occupations by keyword. Returns list of {code, title}."""
-    data = make_request("/online/search", api_key, {"keyword": keyword})
+    data = make_request("online/search", api_key, {"keyword": keyword})
     occupations = data.get("occupation", [])
     return [{"code": occ["code"], "title": occ["title"]} for occ in occupations]
 
 
 def get_occupation_tasks(code: str, api_key: str) -> list:
-    """Fetch all tasks for an occupation."""
-    data = make_request(
-        f"/online/occupations/{quote(code, safe='')}/details/tasks",
-        api_key, {"display": "long"}
+    """Fetch all tasks for an occupation (follows pagination)."""
+    raw_tasks = _fetch_all_pages(
+        f"online/occupations/{quote(code, safe='')}/details/tasks",
+        api_key, "task"
     )
     tasks = []
-    for t in data.get("task", []):
+    for t in raw_tasks:
+        # v2 uses 'title' instead of 'statement', flat 'importance' instead of nested score
         tasks.append({
-            "statement": t.get("statement", ""),
+            "statement": t.get("title", t.get("statement", "")),
             "category": t.get("category", ""),
-            "score": t.get("score", {}).get("value", 0),
-            "important": t.get("score", {}).get("important", False),
+            "score": t.get("importance", 0),
+            "important": t.get("importance", 0) >= 50,
         })
     return sorted(tasks, key=lambda x: x["score"], reverse=True)
 
 
 def get_occupation_elements(code: str, element_type: str, api_key: str) -> list:
-    """Fetch skills, knowledge, or abilities for an occupation."""
-    data = make_request(
-        f"/online/occupations/{quote(code, safe='')}/details/{element_type}",
-        api_key, {"display": "long"}
+    """Fetch all skills, knowledge, or abilities (follows pagination)."""
+    raw_elements = _fetch_all_pages(
+        f"online/occupations/{quote(code, safe='')}/details/{element_type}",
+        api_key, "element"
     )
     elements = []
-    for el in data.get("element", []):
+    for el in raw_elements:
+        # v2 uses flat 'importance' integer (0-100)
+        importance = el.get("importance", 0)
         elements.append({
             "name": el.get("name", ""),
             "description": el.get("description", ""),
-            "score": el.get("score", {}).get("value", 0),
-            "important": el.get("score", {}).get("important", False),
+            "score": importance,
+            "important": importance >= 50,
         })
     return sorted(elements, key=lambda x: x["score"], reverse=True)
 
@@ -103,7 +126,7 @@ def get_occupation_elements(code: str, element_type: str, api_key: str) -> list:
 def get_occupation_summary(code: str, api_key: str) -> dict:
     """Fetch the occupation summary/description."""
     data = make_request(
-        f"/online/occupations/{quote(code, safe='')}",
+        f"online/occupations/{quote(code, safe='')}",
         api_key
     )
     return {
@@ -579,6 +602,15 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
         .header h1 {{ font-size: 22px; font-weight: 700; margin-bottom: 4px; }}
         .header .code {{ font-size: 13px; opacity: 0.7; font-family: monospace; margin-bottom: 12px; }}
         .header .desc {{ font-size: 14px; line-height: 1.7; opacity: 0.9; max-width: 900px; }}
+        .back-btn {{
+            display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px;
+            background: rgba(255,255,255,0.15); color: var(--text-on-dark);
+            border: 1px solid rgba(255,255,255,0.25); border-radius: 8px;
+            text-decoration: none; font-size: 13px; font-weight: 500;
+            margin-bottom: 14px; transition: background 0.2s;
+        }}
+        .back-btn:hover {{ background: rgba(255,255,255,0.25); }}
+        @media print {{ .back-btn {{ display: none; }} }}
 
         /* KPI row */
         .kpi-row {{
@@ -870,6 +902,7 @@ def generate_dashboard(summary: dict, tasks: list, skills: list,
     <div class="container">
         <!-- Header -->
         <div class="header">
+            <a href="/" class="back-btn" id="back-btn">&larr; New Search</a>
             <h1>{title}</h1>
             <div class="code">O*NET-SOC: {code}</div>
             <div class="desc">{description}</div>
